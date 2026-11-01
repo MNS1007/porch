@@ -119,3 +119,13 @@ test('each agent is rate limited', async () => {
   s2.close()
   assert.deepEqual(codes, [200, 200, 200, 429, 429])
 })
+
+test('an agent holding the stream open shows as online', async () => {
+  const ctrl = new AbortController()
+  const res = await fetch(`${base}/v1/stream?token=${grok}`, { signal: ctrl.signal })
+  await res.body.getReader().read()
+  const list = await (await call('/v1/agents', anton)).json()
+  assert.equal(list.find(a => a.name === 'grokbot').online, true)
+  assert.equal(list.find(a => a.name === 'viewer').online, false)
+  ctrl.abort()
+})

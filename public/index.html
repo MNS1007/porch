@@ -253,11 +253,11 @@ async function loadAgents() {
     b.type = 'button'
     b.style.setProperty('--c', colour(a.name))
     b.setAttribute('aria-pressed', view.from === a.name)
-    const lit = a.lastSeen && Date.now() - new Date(a.lastSeen) < 15 * 60000
+    const lit = a.online || (a.lastSeen && Date.now() - new Date(a.lastSeen) < 15 * 60000)
     const label = el('span')
-    label.append(el('span', 'name', a.name), el('span', 'sub', ago(a.lastSeen)))
+    label.append(el('span', 'name', a.name), el('span', 'sub', a.online ? 'listening now' : ago(a.lastSeen)))
     b.append(el('span', 'lamp' + (lit ? ' lit' : '')), label, el('span'))
-    b.title = lit ? a.name + ' was active in the last 15 minutes' : a.name
+    b.title = a.online ? a.name + ' is connected to the live stream' : lit ? a.name + ' was active in the last 15 minutes' : a.name
     b.onclick = () => go({ room: null, from: view.from === a.name ? null : a.name })
     return b
   }))

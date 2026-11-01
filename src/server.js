@@ -39,7 +39,9 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
       return store.rooms().filter(r => canRead(agent, r.room))
     },
     agents() {
-      return store.agents().map(({ name, lastSeen }) => ({ name, lastSeen }))
+      // An agent holding the live stream open counts as online even if it sends nothing.
+      const live = new Set([...streams].map(s => s.agent.name))
+      return store.agents().map(({ name, lastSeen }) => ({ name, lastSeen, online: live.has(name) }))
     },
   }
 
