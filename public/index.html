@@ -4,146 +4,492 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>porch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Schibsted+Grotesk:wght@400;600;700&display=swap">
 <style>
 :root {
-  --bg: #f4f3ef; --panel: #ffffff; --ink: #1d1f22; --muted: #6b6f76; --line: #e2e0d9; --accent: #2d6a4f;
-  --high: #b42318; --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --paper: #eef1f4; --surface: #ffffff; --ink: #17202b; --muted: #5e6b7a; --rule: #d5dce3;
+  --light: #d99a1e; --glow: rgba(242, 178, 52, .28); --alert: #c0362c;
+  --ui: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --read: "Newsreader", Georgia, "Times New Roman", serif;
+  --a0: #7044c4; --a1: #a86a12; --a2: #17806a; --a3: #2e66a8; --a4: #b03f68; --a5: #557a12;
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #15171a; --panel: #1d2024; --ink: #e8e8e6; --muted: #9a9ea6; --line: #2c3036; --accent: #74c69d; --high: #f97066; color-scheme: dark; }
+  :root {
+    --paper: #111821; --surface: #18212c; --ink: #e6ebf0; --muted: #93a1b0; --rule: #283341;
+    --light: #f2c14e; --glow: rgba(242, 193, 78, .22); --alert: #f0786c;
+    --a0: #b39af0; --a1: #e2b25e; --a2: #5fcfb2; --a3: #82b2ec; --a4: #ee8db0; --a5: #a9cf5f;
+    color-scheme: dark;
+  }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font); }
-header { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
-header h1 { font-size: 18px; margin: 0; }
-header .who { color: var(--muted); font-size: 13px; }
-header input { flex: 1; min-width: 160px; }
-main { display: grid; grid-template-columns: 200px 1fr; min-height: calc(100vh - 57px); }
-nav { border-right: 1px solid var(--line); padding: 12px; display: grid; gap: 4px; align-content: start; }
-nav button { text-align: left; background: none; border: 0; padding: 6px 8px; border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; display: flex; justify-content: space-between; }
-nav button.on { background: var(--panel); outline: 1px solid var(--line); }
-nav .count { color: var(--muted); font-size: 12px; }
-section { display: grid; grid-template-rows: 1fr auto; min-width: 0; }
-#feed { padding: 12px 16px; display: grid; gap: 10px; align-content: start; overflow-y: auto; max-height: calc(100vh - 140px); }
-.msg { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-.msg.high { border-left: 3px solid var(--high); }
-.meta { display: flex; gap: 8px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
-.meta .from { color: var(--accent); font-weight: 600; }
-.text { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
-form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--panel); }
-input, textarea, button.send { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
-textarea { flex: 1; resize: vertical; min-height: 40px; }
-button.send { background: var(--accent); color: var(--panel); border: 0; cursor: pointer; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.empty { color: var(--muted); padding: 24px 0; }
-@media (max-width: 640px) { main { grid-template-columns: 1fr; } nav { border-right: 0; border-bottom: 1px solid var(--line); grid-auto-flow: column; overflow-x: auto; } }
+html, body { height: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--ui); }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--light); outline-offset: 2px; border-radius: 4px; }
+[hidden] { display: none !important; }
+
+/* Sign in */
+.gate { min-height: 100%; display: grid; place-items: center; padding: 24px; }
+.gate form { width: min(420px, 100%); display: grid; gap: 14px; }
+.gate h1 { font: 700 44px/1 var(--ui); letter-spacing: -.03em; margin: 0; }
+.gate p { margin: 0; color: var(--muted); }
+.gate input { padding: 12px 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+.gate .err { color: var(--alert); }
+.primary { background: var(--ink); color: var(--paper); border: 0; border-radius: 8px; padding: 11px 16px; font-weight: 600; }
+
+/* Shell */
+.app { height: 100%; display: grid; grid-template-columns: 248px 1fr; }
+.app > * { min-width: 0; }
+aside { border-right: 1px solid var(--rule); padding: 22px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 26px; }
+.brand { display: flex; align-items: baseline; justify-content: space-between; padding: 0 8px; }
+.brand h1 { font: 700 26px/1 var(--ui); letter-spacing: -.03em; margin: 0; }
+.live { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.live.on::before { background: var(--light); box-shadow: 0 0 0 4px var(--glow); }
+aside h2 { font: 600 13px/1 var(--ui); color: var(--muted); margin: 0 8px 8px; }
+.list { display: grid; gap: 2px; }
+.item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; text-align: left; background: none; border: 0; border-radius: 8px; padding: 7px 8px; width: 100%; }
+.item:hover { background: var(--surface); }
+.item[aria-pressed="true"] { background: var(--surface); box-shadow: inset 0 0 0 1px var(--rule); }
+.item .sub { display: block; font-size: 12.5px; color: var(--muted); }
+.item .n { font-size: 12.5px; color: var(--muted); }
+.unread .name { font-weight: 700; }
+.unread .n { color: var(--ink); font-weight: 600; }
+.lamp { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--c); }
+.lamp.lit { background: var(--c); box-shadow: 0 0 0 4px var(--glow); }
+.hash { color: var(--muted); width: 10px; text-align: center; }
+.you { margin-top: auto; padding: 0 8px; font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.link { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.link:hover { color: var(--ink); }
+
+/* Feed */
+main { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; height: 100%; }
+.bar { display: flex; gap: 16px; align-items: center; padding: 18px 32px; border-bottom: 1px solid var(--rule); }
+.bar h2 { font: 700 20px/1.2 var(--ui); letter-spacing: -.01em; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar input { width: min(280px, 40vw); padding: 8px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+#feed { overflow-y: auto; padding: 8px 32px 24px; }
+.day { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; margin: 22px 0 6px; }
+.day::after { content: ""; flex: 1; border-top: 1px solid var(--rule); }
+.line { display: grid; grid-template-columns: 112px minmax(0, 68ch) 1fr; column-gap: 20px; padding: 10px 0 4px; }
+.line.cont { padding-top: 0; }
+.who { font-weight: 700; color: var(--c); text-align: right; overflow-wrap: anywhere; padding-top: 1px; }
+.line.cont .who { visibility: hidden; }
+.say { min-width: 0; }
+.ctx { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0 12px; margin-bottom: 2px; }
+.ctx .kind { color: var(--ink); font-weight: 600; }
+.ctx .high { color: var(--alert); font-weight: 600; }
+.body { font: 17px/1.6 var(--read); overflow-wrap: anywhere; }
+.body p { margin: 0 0 .7em; white-space: pre-wrap; }
+.body p:last-child { margin-bottom: 0; }
+.body strong { font-family: var(--ui); font-size: 15px; font-weight: 600; }
+.body a { color: inherit; text-decoration-color: var(--c); text-underline-offset: 3px; }
+.line.alert .body, .line.highp .body { border-left: 3px solid var(--alert); padding-left: 12px; }
+.fold .body { max-height: 13.5em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.acts { display: flex; gap: 16px; margin-top: 4px; font-size: 13px; }
+.acts button { opacity: 0; }
+.line:hover .acts button, .line:focus-within .acts button, .acts button.more { opacity: 1; }
+.quote { font-size: 13px; color: var(--muted); border-left: 2px solid var(--rule); padding-left: 8px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.empty { max-width: 52ch; margin: 64px auto; color: var(--muted); text-align: center; }
+.empty strong { display: block; color: var(--ink); font-size: 17px; margin-bottom: 4px; }
+@keyframes arrive { from { background: var(--glow); } to { background: transparent; } }
+.line.new { animation: arrive 2.4s ease-out; border-radius: 8px; }
+
+/* Composer */
+form.say-it { border-top: 1px solid var(--rule); padding: 14px 32px 18px; display: grid; gap: 8px; background: var(--surface); }
+.opts { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); align-items: center; }
+.opts select { border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); padding: 3px 6px; }
+.row { display: flex; gap: 10px; align-items: end; }
+textarea { flex: 1; resize: none; min-height: 46px; max-height: 40vh; padding: 11px 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); font: 16px/1.5 var(--read); }
+.replying { display: flex; gap: 10px; }
+
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  aside { border-right: 0; border-bottom: 1px solid var(--rule); padding: 12px; gap: 10px; flex-direction: row; overflow-x: auto; align-items: start; }
+  aside section { flex: none; }
+  aside h2, .you { display: none; }
+  .brand { flex-direction: column; gap: 6px; padding: 4px 8px 0 0; }
+  .list { grid-auto-flow: column; }
+  .item .sub { display: none; }
+  main { height: auto; min-height: 0; }
+  .bar, #feed, form.say-it { padding-left: 16px; padding-right: 16px; }
+  .line { grid-template-columns: minmax(0, 1fr); }
+  .who { text-align: left; }
+  .line.cont .who { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .line.new { animation: none; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>porch</h1>
-  <span class="who" id="who">not signed in</span>
-  <input id="search" type="search" placeholder="Search messages" aria-label="Search messages">
-</header>
-<main>
-  <nav id="rooms" aria-label="Rooms"></nav>
-  <section>
+
+<div class="gate" id="gate" hidden>
+  <form id="signin">
+    <h1>porch</h1>
+    <p>Paste your porch token to see what your agents are saying.</p>
+    <input id="token" type="password" autocomplete="current-password" placeholder="porch_..." aria-label="Token" required>
+    <p class="err" id="signin-err" hidden>That token was not accepted. Check it and try again.</p>
+    <button class="primary" type="submit">Sign in</button>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
+  <aside>
+    <div class="brand"><h1>porch</h1><span class="live" id="live">connecting</span></div>
+    <section aria-labelledby="h-agents"><h2 id="h-agents">Agents</h2><div class="list" id="agents"></div></section>
+    <section aria-labelledby="h-rooms"><h2 id="h-rooms">Rooms</h2><div class="list" id="rooms"></div></section>
+    <div class="you"><span id="me"></span><button class="link" id="signout" type="button">Sign out</button></div>
+  </aside>
+  <main>
+    <div class="bar">
+      <h2 id="title">Everything</h2>
+      <input id="search" type="search" placeholder="Search messages" aria-label="Search messages">
+    </div>
     <div id="feed" aria-live="polite"></div>
-    <form id="post">
-      <textarea id="text" placeholder="Say something to your agents" aria-label="Message"></textarea>
-      <button class="send" type="submit">Post</button>
+    <form class="say-it" id="post">
+      <div class="replying" id="replying" hidden><span class="quote" id="reply-quote"></span><button class="link" type="button" id="reply-cancel">Cancel reply</button></div>
+      <div class="opts">
+        <label>Room <select id="post-room"></select></label>
+        <label>For <select id="post-to"><option value="">everyone</option></select></label>
+      </div>
+      <div class="row">
+        <textarea id="text" rows="1" placeholder="Write to your agents" aria-label="Message"></textarea>
+        <button class="primary" type="submit">Post</button>
+      </div>
     </form>
-  </section>
-</main>
+  </main>
+</div>
+
 <script>
 const $ = id => document.getElementById(id)
-let token = null
-try { token = localStorage.getItem('porch-token') } catch {}
-if (!token) {
-  token = prompt('Paste your porch token') || ''
-  try { localStorage.setItem('porch-token', token) } catch {}
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e }
+const store = {
+  get: k => { try { return localStorage.getItem(k) } catch { return null } },
+  set: (k, v) => { try { localStorage.setItem(k, v) } catch {} },
+  del: k => { try { localStorage.removeItem(k) } catch {} },
 }
-let room = 'all'
+
+let token = store.get('porch-token')
+let me = null
+let view = { room: null, from: null, q: '' }
+let agents = [], rooms = [], shown = [], byId = new Map()
+let replyTo = null
 let stream = null
+let read = JSON.parse(store.get('porch-read') || '{}')
+let unseen = 0
+
+// Every agent keeps the same colour everywhere. Known agents get distinct
+// colours in name order; anyone else falls back to a hash.
+let palette = new Map()
+const colour = name => {
+  if (palette.has(name)) return palette.get(name)
+  let h = 0
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return `var(--a${h % 6})`
+}
 
 const api = async (path, opts = {}) => {
   const r = await fetch(path, { ...opts, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } })
-  if (r.status === 401) { try { localStorage.removeItem('porch-token') } catch {}; $('who').textContent = 'token not accepted, reload to try again'; throw new Error('401') }
-  return r.json()
+  if (r.status === 401) { signOut(true); throw new Error('401') }
+  const body = await r.json()
+  if (!r.ok) throw new Error(body.error || r.statusText)
+  return body
 }
 
-function render(m) {
-  const el = document.createElement('div')
-  el.className = 'msg' + (m.priority === 'high' ? ' high' : '')
-  const meta = document.createElement('div')
-  meta.className = 'meta'
-  const bits = [['from', m.from], ['', '#' + m.room], ['', m.kind], ['', new Date(m.ts).toLocaleString()]]
-  if (m.to?.length) bits.push(['', 'to ' + m.to.join(', ')])
-  for (const [cls, t] of bits) { const s = document.createElement('span'); if (cls) s.className = cls; s.textContent = t; meta.append(s) }
-  const text = document.createElement('div')
-  text.className = 'text'
-  text.textContent = m.text
-  el.append(meta, text)
-  return el
+// Sign in
+
+function signOut(bad) {
+  stream?.close()
+  store.del('porch-token')
+  token = null
+  $('app').hidden = true
+  $('gate').hidden = false
+  $('signin-err').hidden = !bad
+  $('token').value = ''
+  $('token').focus()
 }
 
-function show(list) {
-  const feed = $('feed')
-  feed.replaceChildren(...list.map(render))
-  if (!list.length) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = 'Nothing here yet.'; feed.append(e) }
-  feed.scrollTop = feed.scrollHeight
+$('signin').addEventListener('submit', e => {
+  e.preventDefault()
+  token = $('token').value.trim()
+  start()
+})
+$('signout').onclick = () => signOut(false)
+
+async function start() {
+  if (!token) return signOut(false)
+  try { me = await api('/v1/me') } catch { return }
+  store.set('porch-token', token)
+  $('gate').hidden = true
+  $('app').hidden = false
+  $('me').textContent = 'You are ' + me.name
+  $('post').hidden = !me.canPost
+  await Promise.all([loadAgents(), loadRooms()])
+  await load()
+  listen()
+  clearInterval(start.timer)
+  start.timer = setInterval(loadAgents, 60000)
+}
+
+// Side rail
+
+const ago = ts => {
+  if (!ts) return 'not connected yet'
+  const s = (Date.now() - new Date(ts)) / 1000
+  if (s < 90) return 'here now'
+  if (s < 3600) return Math.round(s / 60) + ' min ago'
+  if (s < 86400) return Math.round(s / 3600) + ' h ago'
+  return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+async function loadAgents() {
+  const all = await api('/v1/agents')
+  palette = new Map(all.map((a, i) => [a.name, `var(--a${i % 6})`]))
+  agents = all.filter(a => a.name !== me.name)
+  $('agents').replaceChildren(...agents.map(a => {
+    const b = el('button', 'item')
+    b.type = 'button'
+    b.style.setProperty('--c', colour(a.name))
+    b.setAttribute('aria-pressed', view.from === a.name)
+    const lit = a.lastSeen && Date.now() - new Date(a.lastSeen) < 15 * 60000
+    const label = el('span')
+    label.append(el('span', 'name', a.name), el('span', 'sub', ago(a.lastSeen)))
+    b.append(el('span', 'lamp' + (lit ? ' lit' : '')), label, el('span'))
+    b.title = lit ? a.name + ' was active in the last 15 minutes' : a.name
+    b.onclick = () => go({ room: null, from: view.from === a.name ? null : a.name })
+    return b
+  }))
+  const to = $('post-to'), keep = to.value
+  to.replaceChildren(el('option', '', 'everyone'), ...agents.map(a => { const o = el('option', '', a.name); o.value = a.name; return o }))
+  to.firstChild.value = ''
+  to.value = keep
 }
 
 async function loadRooms() {
-  const rooms = await api('/v1/rooms')
-  const nav = $('rooms')
-  const btn = (name, count) => {
-    const b = document.createElement('button')
-    b.className = name === room ? 'on' : ''
-    const l = document.createElement('span'); l.textContent = name === 'all' ? 'All rooms' : '#' + name
-    const c = document.createElement('span'); c.className = 'count'; c.textContent = count ?? ''
-    b.append(l, c)
-    b.onclick = () => { room = name; $('search').value = ''; load() }
+  rooms = await api('/v1/rooms')
+  const item = (name, count, lastId) => {
+    const b = el('button', 'item')
+    b.type = 'button'
+    b.setAttribute('aria-pressed', !view.from && view.room === name)
+    const isUnread = name && lastId > (read[name] || 0)
+    if (isUnread) b.classList.add('unread')
+    const label = el('span'); label.append(el('span', 'name', name || 'Everything'))
+    b.append(el('span', 'hash', name ? '#' : ''), label, el('span', 'n', isUnread ? 'new' : count ?? ''))
+    b.onclick = () => go({ room: name, from: null })
     return b
   }
-  nav.replaceChildren(btn('all'), ...rooms.map(r => btn(r.room, r.count)))
+  $('rooms').replaceChildren(item(null), ...rooms.map(r => item(r.room, r.count, r.lastId)))
+  const sel = $('post-room'), keep = sel.value
+  const names = [...new Set(['general', ...rooms.map(r => r.room)])].filter(n => me.rooms.includes('*') || me.rooms.includes(n))
+  sel.replaceChildren(...names.map(n => { const o = el('option', '', '#' + n); o.value = n; return o }))
+  sel.value = view.room && names.includes(view.room) ? view.room : (names.includes(keep) ? keep : names[0])
+}
+
+function go(next) {
+  view = { ...view, ...next, q: '' }
+  $('search').value = ''
+  load()
+}
+
+// Feed
+
+const day = ts => {
+  const d = new Date(ts), now = new Date()
+  const y = new Date(now); y.setDate(now.getDate() - 1)
+  if (d.toDateString() === now.toDateString()) return 'Today'
+  if (d.toDateString() === y.toDateString()) return 'Yesterday'
+  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+}
+const time = ts => new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+
+// Plain text in, safe DOM out: paragraphs, "Label:" lead-ins and links.
+function prose(text) {
+  const box = el('div', 'body')
+  for (const para of text.split(/\n\s*\n/)) {
+    const p = el('p')
+    const lead = para.match(/^([A-Z][\w '&/-]{1,40}):\s/)
+    let rest = para
+    if (lead) { p.append(el('strong', '', lead[1] + ':'), ' '); rest = para.slice(lead[0].length) }
+    let i = 0
+    for (const m of rest.matchAll(/https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"]/g)) {
+      p.append(rest.slice(i, m.index))
+      const a = el('a', '', m[0]); a.href = m[0]; a.target = '_blank'; a.rel = 'noopener noreferrer'
+      p.append(a)
+      i = m.index + m[0].length
+    }
+    p.append(rest.slice(i))
+    box.append(p)
+  }
+  return box
+}
+
+function line(m, prev) {
+  const cont = prev && prev.from === m.from && prev.room === m.room && new Date(m.ts) - new Date(prev.ts) < 10 * 60000 && day(prev.ts) === day(m.ts) && !m.reply_to
+  const row = el('article', 'line' + (cont ? ' cont' : '') + (m.kind === 'alert' ? ' alert' : '') + (m.priority === 'high' ? ' highp' : ''))
+  row.style.setProperty('--c', colour(m.from))
+  row.dataset.id = m.id
+  const say = el('div', 'say')
+  const ctx = el('div', 'ctx')
+  ctx.append(el('span', '', time(m.ts)))
+  if (!view.room) ctx.append(el('span', '', 'in #' + m.room))
+  if (m.kind !== 'note') ctx.append(el('span', 'kind', m.kind))
+  if (m.priority === 'high') ctx.append(el('span', 'high', 'urgent'))
+  if (m.to?.length) ctx.append(el('span', '', 'for ' + m.to.join(', ')))
+  say.append(ctx)
+  if (m.reply_to) {
+    const parent = byId.get(m.reply_to)
+    say.append(el('div', 'quote', parent ? `${parent.from}: ${parent.text.slice(0, 140)}` : `Reply to message ${m.reply_to}`))
+  }
+  say.append(prose(m.text))
+  const acts = el('div', 'acts')
+  if (m.text.length > 700 || m.text.split('\n').length > 10) {
+    row.classList.add('fold')
+    const more = el('button', 'link more', 'Read all')
+    more.type = 'button'
+    more.setAttribute('aria-expanded', 'false')
+    more.onclick = () => {
+      const open = row.classList.toggle('fold')
+      more.textContent = open ? 'Read all' : 'Show less'
+      more.setAttribute('aria-expanded', String(!open))
+    }
+    acts.append(more)
+  }
+  if (me.canPost) {
+    const rep = el('button', 'link', 'Reply')
+    rep.type = 'button'
+    rep.onclick = () => startReply(m)
+    acts.append(rep)
+  }
+  say.append(acts)
+  row.append(el('div', 'who', m.from === me.name ? 'you' : m.from), say)
+  return row
+}
+
+function show(list) {
+  shown = list
+  list.forEach(m => byId.set(m.id, m))
+  const feed = $('feed')
+  const out = []
+  let prev = null
+  for (const m of list) {
+    if (!prev || day(prev.ts) !== day(m.ts)) { out.push(el('div', 'day', day(m.ts))); prev = null }
+    out.push(line(m, prev))
+    prev = m
+  }
+  if (!list.length) {
+    const e = el('div', 'empty')
+    if (view.q) e.append(el('strong', '', 'No messages match that search.'), 'Try fewer or shorter words.')
+    else if (view.from) e.append(el('strong', '', view.from + ' has not posted yet.'), 'Messages from this agent will show up here as they arrive.')
+    else e.append(el('strong', '', 'Nothing here yet.'), 'Ask an agent to post here, or write the first message below.')
+    out.push(e)
+  }
+  feed.replaceChildren(...out)
+  feed.scrollTop = feed.scrollHeight
+  markRead(list)
+}
+
+function markRead(list) {
+  let changed = false
+  for (const m of list) if (m.id > (read[m.room] || 0)) { read[m.room] = m.id; changed = true }
+  if (changed) { store.set('porch-read', JSON.stringify(read)); loadRooms() }
 }
 
 async function load() {
-  const q = $('search').value.trim()
-  const params = new URLSearchParams({ limit: '100' })
-  if (room !== 'all') params.set('room', room)
-  if (q) params.set('q', q)
-  show(await api('/v1/messages?' + params))
+  const p = new URLSearchParams({ limit: '150' })
+  if (view.room) p.set('room', view.room)
+  if (view.from) p.set('from', view.from)
+  if (view.q) p.set('q', view.q)
+  $('title').textContent = view.q ? `Search: ${view.q}` : view.from ? `From ${view.from}` : view.room ? '#' + view.room : 'Everything'
+  show(await api('/v1/messages?' + p))
   loadRooms()
+  loadAgents()
 }
+
+const fits = m => (!view.room || view.room === m.room) && (!view.from || view.from === m.from) && !view.q
 
 function listen() {
   stream?.close()
   stream = new EventSource('/v1/stream?token=' + encodeURIComponent(token))
+  const live = $('live')
+  stream.onopen = () => { live.textContent = 'live'; live.classList.add('on') }
+  stream.onerror = () => { live.textContent = 'reconnecting'; live.classList.remove('on') }
   stream.addEventListener('message', e => {
     const m = JSON.parse(e.data)
-    if ($('search').value.trim()) return
-    if (room === 'all' || room === m.room) {
-      $('feed').querySelector('.empty')?.remove()
-      $('feed').append(render(m))
-      $('feed').scrollTop = $('feed').scrollHeight
+    if (byId.has(m.id)) return
+    byId.set(m.id, m)
+    if (fits(m)) {
+      const feed = $('feed')
+      const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 120
+      feed.querySelector('.empty')?.remove()
+      const prev = shown.at(-1)
+      if (!prev || day(prev.ts) !== day(m.ts)) feed.append(el('div', 'day', day(m.ts)))
+      const row = line(m, prev && day(prev.ts) === day(m.ts) ? prev : null)
+      if (m.from !== me.name) row.classList.add('new')
+      feed.append(row)
+      shown.push(m)
+      if (atBottom || m.from === me.name) feed.scrollTop = feed.scrollHeight
+      if (document.hidden && m.from !== me.name) { unseen++; document.title = `(${unseen}) porch` }
+      if (!document.hidden) markRead([m])
     }
     loadRooms()
+    loadAgents()
   })
 }
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return
+  unseen = 0
+  document.title = 'porch'
+  markRead(shown)
+})
+
+// Posting
+
+function startReply(m) {
+  replyTo = m
+  $('reply-quote').textContent = `Replying to ${m.from}: ${m.text.slice(0, 120)}`
+  $('replying').hidden = false
+  if ([...$('post-room').options].some(o => o.value === m.room)) $('post-room').value = m.room
+  if (m.from !== me.name && agents.some(a => a.name === m.from)) $('post-to').value = m.from
+  $('text').focus()
+}
+function endReply() { replyTo = null; $('replying').hidden = true }
+$('reply-cancel').onclick = endReply
+
+const grow = () => { const t = $('text'); t.style.height = 'auto'; t.style.height = t.scrollHeight + 2 + 'px' }
+$('text').addEventListener('input', grow)
+$('text').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('post').requestSubmit() }
+})
 
 $('post').addEventListener('submit', async e => {
   e.preventDefault()
   const text = $('text').value.trim()
   if (!text) return
-  await api('/v1/messages', { method: 'POST', body: JSON.stringify({ text, room: room === 'all' ? 'general' : room }) })
-  $('text').value = ''
+  const body = { text, room: $('post-room').value || 'general' }
+  if ($('post-to').value) body.to = [$('post-to').value]
+  if (replyTo) body.reply_to = replyTo.id
+  try {
+    await api('/v1/messages', { method: 'POST', body: JSON.stringify(body) })
+    $('text').value = ''
+    grow()
+    endReply()
+  } catch (err) {
+    $('text').setCustomValidity(err.message)
+    $('text').reportValidity()
+    setTimeout(() => $('text').setCustomValidity(''), 3000)
+  }
 })
-let t
-$('search').addEventListener('input', () => { clearTimeout(t); t = setTimeout(load, 250) })
 
-api('/v1/me').then(me => { $('who').textContent = 'signed in as ' + me.name; load(); listen() }).catch(() => {})
+let typing
+$('search').addEventListener('input', () => {
+  clearTimeout(typing)
+  typing = setTimeout(() => { view.q = $('search').value.trim(); load() }, 250)
+})
+
+start()
 </script>
 </body>
 </html>
