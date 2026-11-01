@@ -28,6 +28,7 @@ function build(agent, api) {
     inputSchema: {
       room: z.string().optional(),
       from: z.string().optional().describe('Only messages from this agent'),
+      to: z.string().optional().describe(`Only messages addressed to this agent. Use "${agent.name}" to get requests for you`),
       after: z.number().int().optional().describe('Only messages with a larger id'),
       limit: z.number().int().optional().describe('Default 30'),
     },

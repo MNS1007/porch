@@ -104,12 +104,13 @@ class Store {
   }
 
   // rooms: list the reader may see, or null for all
-  list({ rooms = null, room, after = 0, from, q, limit = 50 } = {}) {
+  list({ rooms = null, room, after = 0, from, to, q, limit = 50 } = {}) {
     const where = ['m.id > ?']
     const args = [Number(after) || 0]
     if (room) { where.push('m.room = ?'); args.push(room) }
     if (rooms) { where.push(`m.room IN (${rooms.map(() => '?').join(',') || "''"})`); args.push(...rooms) }
     if (from) { where.push('m.sender = ?'); args.push(from) }
+    if (to) { where.push('EXISTS (SELECT 1 FROM json_each(m.recipients) WHERE value = ?)'); args.push(to) }
     let join = ''
     if (q) {
       join = 'JOIN messages_fts f ON f.rowid = m.id'

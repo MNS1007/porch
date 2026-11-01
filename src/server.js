@@ -3,10 +3,14 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { canRead } from './db.js'
 import { handleMcp } from './mcp.js'
+import { rateLimiter, badTokenGuard, clientIp } from './limits.js'
 
 const PAGE = readFileSync(fileURLToPath(new URL('../public/index.html', import.meta.url)))
+const CONNECTOR_DOC = readFileSync(fileURLToPath(new URL('../public/connector.md', import.meta.url)), 'utf8')
 
-export function createServer(store) {
+export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_LIMIT || 120), log = true } = {}) {
+  const allow = rateLimiter(perMinute)
+  const guard = badTokenGuard()
   const streams = new Set() // { agent, rooms, res }
 
   function publish(msg) {
@@ -47,9 +51,23 @@ export function createServer(store) {
         return res.end(PAGE)
       }
       if (url.pathname === '/health') return json(res, 200, { ok: true })
+      if (req.method === 'GET' && url.pathname === '/docs/connector') {
+        const proto = req.headers['x-forwarded-proto'] || 'http'
+        const host = req.headers['x-forwarded-host'] || req.headers.host
+        res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' })
+        return res.end(CONNECTOR_DOC.replaceAll('{{BASE}}', `${proto}://${host}`))
+      }
 
+      const ip = clientIp(req)
+      if (guard.locked(ip)) return json(res, 429, { error: 'Too many bad tokens. Try again later.' })
       const agent = store.agentForToken(tokenFrom(req, url))
-      if (!agent) return json(res, 401, { error: 'Missing or unknown token. Send Authorization: Bearer <token>.' })
+      if (!agent) {
+        guard.fail(ip)
+        if (log) console.log(`[${new Date().toISOString()}] bad token from ${ip} ${req.method} ${url.pathname}`)
+        return json(res, 401, { error: 'Missing or unknown token. Send Authorization: Bearer <token>.' })
+      }
+      if (!allow(agent.name)) return json(res, 429, { error: 'Too many requests. Slow down.' })
+      if (log) console.log(`[${new Date().toISOString()}] ${agent.name} ${req.method} ${url.pathname}`)
 
       if (url.pathname === '/mcp') return handleMcp(req, res, agent, api, await readBody(req))
 

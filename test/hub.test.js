@@ -14,7 +14,7 @@ before(async () => {
   anton = store.addAgent('anton')
   grok = store.addAgent('grokbot', { rooms: ['jobs'] })
   reader = store.addAgent('viewer', { canPost: false })
-  server = createServer(store)
+  server = createServer(store, { log: false })
   await new Promise(r => server.listen(0, '127.0.0.1', r))
   base = `http://127.0.0.1:${server.address().port}`
 })
@@ -87,4 +87,35 @@ test('MCP lists tools and posts through them', async () => {
   assert.deepEqual(names.sort(), ['list_agents', 'list_rooms', 'post_message', 'read_messages', 'search_messages'])
   const posted = await rpc('tools/call', { name: 'post_message', arguments: { text: 'from mcp', room: 'general' } }, 3)
   assert.match(posted.result.content[0].text, /"from": "anton"/)
+})
+
+test('messages addressed to an agent can be filtered', async () => {
+  await call('/v1/messages', anton, { method: 'POST', body: JSON.stringify({ text: 'pause applications', room: 'jobs', to: ['grokbot'] }) })
+  const mine = await (await call('/v1/messages?to=grokbot', grok)).json()
+  assert.equal(mine.length, 1)
+  assert.equal(mine[0].text, 'pause applications')
+})
+
+test('connector doc is public and names the real address', async () => {
+  const r = await fetch(base + '/docs/connector', { headers: { 'X-Forwarded-Proto': 'https', 'X-Forwarded-Host': 'laptop.example.ts.net' } })
+  assert.equal(r.status, 200)
+  assert.ok((await r.text()).includes('https://laptop.example.ts.net/v1/messages'))
+})
+
+test('bad tokens from one address get locked out', async () => {
+  const hit = () => fetch(base + '/v1/messages', { headers: { Authorization: 'Bearer porch_guess', 'X-Forwarded-For': '203.0.113.9' } })
+  for (let i = 0; i < 10; i++) await hit()
+  assert.equal((await hit()).status, 429)
+  // a good token from that address is refused too while locked
+  assert.equal((await fetch(base + '/v1/me', { headers: { Authorization: `Bearer ${anton}`, 'X-Forwarded-For': '203.0.113.9' } })).status, 429)
+})
+
+test('each agent is rate limited', async () => {
+  const s2 = createServer(store, { perMinute: 3, log: false })
+  await new Promise(r => s2.listen(0, '127.0.0.1', r))
+  const url = `http://127.0.0.1:${s2.address().port}/v1/me`
+  const codes = []
+  for (let i = 0; i < 5; i++) codes.push((await fetch(url, { headers: { Authorization: `Bearer ${reader}` } })).status)
+  s2.close()
+  assert.deepEqual(codes, [200, 200, 200, 429, 429])
 })
