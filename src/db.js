@@ -73,6 +73,12 @@ class Store {
     this.loadRooms()
   }
 
+  // The CLI may change groups while the hub runs, so reload when another connection wrote.
+  fresh() {
+    const v = this.db.prepare('PRAGMA data_version').get().data_version
+    if (v !== this.version) { this.version = v; this.loadRooms() }
+  }
+
   loadRooms() {
     this.meta = new Map(this.db.prepare('SELECT * FROM rooms').all().map(r => [r.name, {
       name: r.name, type: r.type, title: r.title, members: r.members ? JSON.parse(r.members) : null,
@@ -93,6 +99,10 @@ class Store {
   // A new reader starts with nothing unread.
   seedReads(name) {
     this.db.prepare('INSERT OR IGNORE INTO reads (agent, room, last_id) SELECT ?, room, MAX(id) FROM messages GROUP BY room').run(name)
+  }
+
+  setRooms(name, rooms) {
+    return this.db.prepare('UPDATE agents SET rooms = ? WHERE name = ?').run(JSON.stringify(rooms), name).changes > 0
   }
 
   removeAgent(name) {
@@ -118,8 +128,11 @@ class Store {
 
   // Rooms, groups and DMs
 
+  // A group whose members are ["*"] is open to every agent, whatever its token lists.
+  // Everyone (general) is always like that.
   room(name) {
-    if (name === EVERYONE) return { name, type: 'group', title: 'Everyone', members: null }
+    this.fresh()
+    if (name === EVERYONE) return { name, type: 'group', title: 'Everyone', members: ['*'] }
     return this.meta.get(name) || { name, type: name.startsWith('dm:') ? 'dm' : 'group', title: null, members: null }
   }
 
@@ -127,7 +140,7 @@ class Store {
   // Looked up on every check, so a new group member gets messages on an open stream.
   canRead(agent, name) {
     if (agent.owner || agent.rooms.includes('*') || agent.rooms.includes(name)) return true
-    return !!this.room(name).members?.includes(agent.name)
+    return isMember(this.room(name), agent.name)
   }
 
   // Only the two members, and the owner, write in a DM.
@@ -139,8 +152,9 @@ class Store {
   // Rooms this agent may read, or null for all of them.
   readable(agent) {
     if (agent.owner || agent.rooms.includes('*')) return null
-    const mine = [...this.meta.values()].filter(r => r.members?.includes(agent.name)).map(r => r.name)
-    return [...new Set([...agent.rooms, ...mine])]
+    this.fresh()
+    const mine = [...this.meta.values()].filter(r => isMember(r, agent.name)).map(r => r.name)
+    return [...new Set([EVERYONE, ...agent.rooms, ...mine])]
   }
 
   saveRoom({ name, type, title = null, members = null, by = null }) {
@@ -157,8 +171,9 @@ class Store {
     if (!NAME.test(name)) throw new Error('Group names use lowercase letters, digits, - and _, up to 40 characters.')
     if (name === EVERYONE) throw new Error('Everyone always includes every agent.')
     if (this.meta.get(name)?.type === 'dm') throw new Error('That name is taken.')
-    const list = [...new Set(arr(members).map(m => m.trim().toLowerCase()))].sort()
-    const unknown = list.filter(m => !this.hasAgent(m))
+    let list = [...new Set(arr(members).map(m => m.trim().toLowerCase()))].sort()
+    if (list.includes('*')) list = ['*']
+    const unknown = list.filter(m => m !== '*' && !this.hasAgent(m))
     if (unknown.length) throw new Error(`No agent named ${unknown.join(', ')}.`)
     return this.saveRoom({ name, type: 'group', title: String(title || '').trim().slice(0, 80) || null, members: list, by })
   }
@@ -192,7 +207,7 @@ class Store {
     for (const name of new Set([EVERYONE, ...tokenRooms, ...this.meta.keys(), ...last.keys()])) {
       if (!this.canRead(agent, name)) continue
       const r = this.room(name)
-      if (!agent.owner && r.members && !r.members.includes(agent.name)) continue
+      if (!agent.owner && r.members && !isMember(r, agent.name)) continue
       out.push({
         room: name,
         type: r.type,
@@ -280,6 +295,8 @@ export function roomName(raw) {
   if (!NAME.test(room)) throw new Error('Room names use lowercase letters, digits, - and _.')
   return room
 }
+
+const isMember = (room, name) => !!room.members && (room.members.includes('*') || room.members.includes(name))
 
 export const dmName = (a, b) => 'dm:' + [a, b].sort().join('+')
 

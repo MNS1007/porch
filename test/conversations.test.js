@@ -141,9 +141,9 @@ test('conversations list: newest first, unread counts, and who sees what', async
   await call('/v1/read', me, { method: 'POST', body: JSON.stringify({ room: dm.room, id: dm.lastId }) })
   assert.equal((await get('/v1/conversations', me)).find(c => c.room === dm.room).unread, 0)
 
-  // grokbot: its token room, its DM and the group it was added to, nothing else
+  // grokbot: Everyone, its token room, its DM and the group it was added to, nothing else
   const g = (await get('/v1/conversations', grok)).map(c => c.room).sort()
-  assert.deepEqual(g, ['dm:grokbot+me', 'jobs', 'research'])
+  assert.deepEqual(g, ['dm:grokbot+me', 'general', 'jobs', 'research'])
   // anton can read everything but only lists open groups and its own conversations
   const a = (await get('/v1/conversations', anton)).map(c => c.room)
   assert.ok(a.includes('general'))
@@ -165,7 +165,7 @@ test('old rooms keep working as open groups and /v1/rooms keeps its shape', asyn
 
 test('a read-only token cannot mark a room it cannot read, or post', async () => {
   assert.equal((await post(viewer, { dm: 'me', text: 'x' })).status, 403)
-  assert.equal((await call('/v1/read', grok, { method: 'POST', body: JSON.stringify({ room: 'general', id: 1 }) })).status, 403)
+  assert.equal((await call('/v1/read', grok, { method: 'POST', body: JSON.stringify({ room: 'news', id: 1 }) })).status, 403)
 })
 
 test('upgrading an old database keeps its messages and counts them as read', async () => {
@@ -188,4 +188,46 @@ test('upgrading an old database keeps its messages and counts them as read', asy
   const again = openDb(path)
   assert.equal(again.list({ room: 'jobs' }).length, 2)
   again.db.close()
+})
+
+test('over MCP an agent starts a DM, the other reads it and replies in the thread', async () => {
+  const rpc = async (token, name, args) => {
+    const r = await call('/mcp', token, { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) })
+    const body = await r.json()
+    return JSON.parse(body.result.content[0].text)
+  }
+  const sent = await rpc(muse, 'send_dm', { to: 'anton', text: 'Any news on the robotics list?' })
+  assert.equal(sent.room, 'dm:anton+muse')
+  const convs = await rpc(anton, 'list_conversations', {})
+  const dm = convs.find(c => c.room === 'dm:anton+muse')
+  assert.equal(dm.title, 'muse')
+  assert.equal(dm.unread, 1)
+  const read = await rpc(anton, 'read_messages', { dm: 'muse' })
+  assert.equal(read.at(-1).text, 'Any news on the robotics list?')
+  // reading marked it read
+  assert.equal((await rpc(anton, 'list_conversations', {})).find(c => c.room === dm.room).unread, 0)
+  await rpc(anton, 'send_dm', { to: 'muse', text: 'Three new ones.', reply_to: sent.id })
+  const replies = await rpc(muse, 'read_messages', { reply_to: sent.id })
+  assert.equal(replies[0].text, 'Three new ones.')
+  assert.deepEqual(replies[0].to, ['muse'])
+  // the owner sees this DM too
+  assert.ok((await rpc(me, 'list_conversations', {})).some(c => c.room === 'dm:anton+muse'))
+})
+
+test('Everyone and groups open to every agent need no token change', async () => {
+  // muse's token lists no rooms at all
+  assert.equal((await post(muse, { text: 'hello everyone' })).status, 201)
+  assert.equal((await post(anton, { room: 'context', text: 'Brief: the owner is job hunting in robotics.' })).status, 201)
+  assert.equal((await call('/v1/messages?room=context', muse)).status, 403)
+  const r = await call('/v1/groups', me, { method: 'POST', body: JSON.stringify({ name: 'context', title: 'Context', members: ['*'] }) })
+  assert.deepEqual((await r.json()).members, ['*'])
+  assert.equal((await get('/v1/messages?room=context', muse)).at(-1).from, 'anton')
+  assert.ok((await get('/v1/conversations', muse)).some(c => c.room === 'context'))
+})
+
+test('a group change made by another connection (the CLI) is seen at once', async () => {
+  const other = openDb(join(dir, 'test.db'))
+  other.saveGroup({ name: 'jobs-team', members: ['muse'] }, 'me')
+  other.db.close()
+  assert.equal((await call('/v1/messages?room=jobs-team', muse)).status, 200)
 })

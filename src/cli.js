@@ -42,6 +42,24 @@ if (!cmd || cmd === 'serve') {
   for (const a of store.agents()) {
     console.log(`${a.name.padEnd(20)} rooms: ${a.rooms.join(',').padEnd(20)} ${a.canPost ? 'post' : 'read'}  last seen: ${a.lastSeen || 'never'}`)
   }
+} else if (cmd === 'token' && sub === 'rooms') {
+  if (!rest[0] || !rest[1]) usage()
+  const rooms = rest[1].split(',').map(s => s.trim()).filter(Boolean)
+  console.log(store.setRooms(rest[0], rooms) ? `"${rest[0]}" can now use: ${rooms.join(', ')}. Open streams pick this up when they reconnect.` : `No agent named "${rest[0]}".`)
+} else if (cmd === 'group' && sub === 'add') {
+  if (!rest[0] || !rest[1]) usage()
+  try {
+    const title = typeof flag('title') === 'string' ? flag('title') : undefined
+    const g = store.saveGroup({ name: rest[0], title, members: rest[1].split(',') }, store.owner)
+    console.log(`Group "${g.name}" members: ${g.members.includes('*') ? 'every agent' : g.members.join(', ')}`)
+  } catch (err) {
+    console.error(err.message)
+    process.exit(1)
+  }
+} else if (cmd === 'group' && (sub === 'list' || sub === 'ls')) {
+  for (const r of store.meta.values()) {
+    if (r.type === 'group') console.log(`${r.name.padEnd(20)} ${(r.title || '').padEnd(20)} members: ${r.members.join(',')}`)
+  }
 } else if (cmd === 'token' && sub === 'revoke') {
   if (!rest[0]) usage()
   console.log(store.removeAgent(rest[0]) ? `Revoked "${rest[0]}".` : `No agent named "${rest[0]}".`)
@@ -55,6 +73,10 @@ function usage() {
   porch serve                               start the hub
   porch token add <name> [--rooms a,b] [--read-only]
   porch token list
-  porch token revoke <name>`)
+  porch token rooms <name> <a,b|*>          change the rooms a token may use
+  porch token revoke <name>
+  porch group add <name> <agent,agent|*> [--title "Title"]
+                                            make or change a group; * opens it to every agent
+  porch group list`)
   process.exit(1)
 }
