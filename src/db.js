@@ -7,8 +7,12 @@ export const KINDS = ['note', 'briefing', 'question', 'answer', 'alert']
 export const PRIORITIES = ['low', 'normal', 'high']
 export const EVERYONE = 'general'
 const MAX_TEXT = 8000
+// Group names are one part. Agent names may add one "/member" part for a family,
+// for example claude-code/renfort is the renfort session of claude-code.
 const NAME = /^[a-z0-9][a-z0-9_-]{0,39}$/
-const DM = /^dm:([a-z0-9][a-z0-9_-]{0,39})\+([a-z0-9][a-z0-9_-]{0,39})$/
+const PART = '[a-z0-9][a-z0-9_-]{0,39}'
+const AGENT = new RegExp(`^${PART}(?:/${PART})?$`)
+const DM = new RegExp(`^dm:(${PART}(?:/${PART})?)\\+(${PART}(?:/${PART})?)$`)
 
 const hash = token => createHash('sha256').update(token).digest('hex')
 
@@ -17,6 +21,7 @@ export function openDb(path, { owner = process.env.PORCH_OWNER || 'me' } = {}) {
   const hadReads = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'reads'").get()
   db.exec(`
     PRAGMA journal_mode = WAL;
+    PRAGMA busy_timeout = 5000;
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ts TEXT NOT NULL,
@@ -88,7 +93,7 @@ class Store {
   // Agents and tokens
 
   addAgent(name, { rooms = ['*'], canPost = true } = {}) {
-    if (!NAME.test(name)) throw new Error('Agent names use lowercase letters, digits, - and _, up to 40 characters.')
+    if (!AGENT.test(name)) throw new Error('Agent names use lowercase letters, digits, - and _, up to 40 characters, with at most one / for a family (claude-code/renfort).')
     const token = 'porch_' + randomBytes(24).toString('base64url')
     this.db.prepare('INSERT INTO agents (name, token_hash, rooms, can_post, created) VALUES (?, ?, ?, ?, ?)')
       .run(name, hash(token), JSON.stringify(rooms), canPost ? 1 : 0, new Date().toISOString())
@@ -115,7 +120,57 @@ class Store {
 
   agents() {
     return this.db.prepare('SELECT name, rooms, can_post, created, last_seen FROM agents ORDER BY name').all()
-      .map(a => ({ name: a.name, rooms: JSON.parse(a.rooms), canPost: !!a.can_post, created: a.created, lastSeen: a.last_seen }))
+      .map(a => ({ name: a.name, ...family(a.name), rooms: JSON.parse(a.rooms), canPost: !!a.can_post, created: a.created, lastSeen: a.last_seen }))
+  }
+
+  // Rename an agent everywhere and keep its history: its token, the messages it
+  // sent, "to" lists, group members, its DM rooms and read state. One transaction,
+  // so it is safe while the hub runs.
+  renameAgent(from, to) {
+    to = String(to || '').trim().toLowerCase()
+    if (!this.hasAgent(from)) throw new Error(`No agent named "${from}".`)
+    if (from === this.owner) throw new Error('That is the owner. Set PORCH_OWNER instead of renaming it.')
+    if (!AGENT.test(to)) throw new Error('Agent names use lowercase letters, digits, - and _, up to 40 characters, with at most one / for a family.')
+    if (this.hasAgent(to)) throw new Error(`"${to}" already exists.`)
+    const db = this.db
+    const swap = list => [...new Set(list.map(n => n === from ? to : n))]
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare('UPDATE agents SET name = ? WHERE name = ?').run(to, from)
+      db.prepare('UPDATE messages SET sender = ? WHERE sender = ?').run(to, from)
+      const addressed = db.prepare("SELECT id, recipients FROM messages WHERE EXISTS (SELECT 1 FROM json_each(recipients) WHERE value = ?)").all(from)
+      const setTo = db.prepare('UPDATE messages SET recipients = ? WHERE id = ?')
+      for (const m of addressed) setTo.run(JSON.stringify(swap(JSON.parse(m.recipients))), m.id)
+      // DM rooms get the new name, and their messages and read state move with them.
+      const dms = new Set([
+        ...db.prepare("SELECT name FROM rooms WHERE type = 'dm'").all().map(r => r.name),
+        ...db.prepare("SELECT DISTINCT room AS name FROM messages WHERE room LIKE 'dm:%'").all().map(r => r.name),
+      ])
+      for (const old of dms) {
+        const pair = old.slice(3).split('+')
+        if (!pair.includes(from)) continue
+        const other = pair.find(n => n !== from)
+        const room = dmName(other, to)
+        db.prepare('UPDATE messages SET room = ? WHERE room = ?').run(room, old)
+        db.prepare('UPDATE OR IGNORE reads SET room = ? WHERE room = ?').run(room, old)
+        db.prepare('DELETE FROM reads WHERE room = ?').run(old)
+        if (db.prepare('SELECT 1 FROM rooms WHERE name = ?').get(room)) db.prepare('DELETE FROM rooms WHERE name = ?').run(old)
+        else db.prepare('UPDATE rooms SET name = ?, members = ? WHERE name = ?').run(room, JSON.stringify([other, to].sort()), old)
+      }
+      for (const g of db.prepare("SELECT name, members FROM rooms WHERE type = 'group' AND members IS NOT NULL").all()) {
+        const members = JSON.parse(g.members)
+        if (members.includes(from)) db.prepare('UPDATE rooms SET members = ? WHERE name = ?').run(JSON.stringify(swap(members).sort()), g.name)
+      }
+      db.prepare('UPDATE rooms SET created_by = ? WHERE created_by = ?').run(to, from)
+      db.prepare('UPDATE OR IGNORE reads SET agent = ? WHERE agent = ?').run(to, from)
+      db.prepare('DELETE FROM reads WHERE agent = ?').run(from)
+      db.exec('COMMIT')
+    } catch (err) {
+      db.exec('ROLLBACK')
+      throw err
+    }
+    this.loadRooms()
+    return to
   }
 
   agentForToken(token) {
@@ -213,6 +268,8 @@ class Store {
         type: r.type,
         title: r.title || (r.type === 'dm' ? dmTitle(name, agent.name) : name),
         members: r.members,
+        // For a DM you are in: the other agent and its family.
+        with: r.type === 'dm' && name.slice(3).split('+').includes(agent.name) ? withWhom(name, agent.name) : null,
         lastId: last.get(name)?.id || 0,
         last: last.get(name) || null,
         unread: unread.get(name) || 0,
@@ -302,7 +359,41 @@ export const dmName = (a, b) => 'dm:' + [a, b].sort().join('+')
 
 function dmTitle(name, viewer) {
   const pair = name.slice(3).split('+')
-  return pair.includes(viewer) ? pair.find(n => n !== viewer) : pair.join(' and ')
+  return pair.includes(viewer) ? displayName(pair.find(n => n !== viewer)) : pair.map(displayName).join(' and ')
+}
+
+function withWhom(name, viewer) {
+  const other = name.slice(3).split('+').find(n => n !== viewer)
+  return { name: other, ...family(other), title: displayName(other) }
+}
+
+// Agents grouped by family, for families with named members:
+// [{ family: 'claude-code', title: 'Claude Code', members: ['main', 'renfort'], note: 'claude-code has sessions main and renfort' }]
+export function families(names) {
+  const out = new Map()
+  for (const n of names) {
+    const { family: fam, member } = family(n)
+    if (!member) continue
+    if (!out.has(fam)) out.set(fam, [])
+    out.get(fam).push(member)
+  }
+  return [...out].map(([fam, members]) => ({
+    family: fam, title: familyTitle(fam), members: members.sort(),
+    note: `${fam} has sessions ${members.sort().join(members.length > 2 ? ', ' : ' and ').replace(/, ([^,]*)$/, ' and $1')}. Write to one as ${fam}/<session>.`,
+  }))
+}
+
+// claude-code/renfort is { family: 'claude-code', member: 'renfort' }; grokbot has no member.
+export function family(name) {
+  const [fam, member = null] = name.split('/')
+  return { family: fam, member }
+}
+
+// How a name reads to people: claude-code/renfort is "Claude Code: renfort".
+export const familyTitle = fam => fam.split(/[-_]/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+export function displayName(name) {
+  const { family: fam, member } = family(name)
+  return member ? `${familyTitle(fam)}: ${member}` : name
 }
 
 function toMessage(r) {

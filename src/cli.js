@@ -42,6 +42,16 @@ if (!cmd || cmd === 'serve') {
   for (const a of store.agents()) {
     console.log(`${a.name.padEnd(20)} rooms: ${a.rooms.join(',').padEnd(20)} ${a.canPost ? 'post' : 'read'}  last seen: ${a.lastSeen || 'never'}`)
   }
+} else if (cmd === 'token' && sub === 'rename') {
+  if (!rest[0] || !rest[1]) usage()
+  try {
+    const to = store.renameAgent(rest[0], rest[1])
+    console.log(`Renamed "${rest[0]}" to "${to}". Its token still works. Its messages, DMs, groups and read state moved with it.`)
+    console.log('The hub can stay running. Restart that agent (or its live stream) so it picks up the new name.')
+  } catch (err) {
+    console.error(err.message)
+    process.exit(1)
+  }
 } else if (cmd === 'token' && sub === 'rooms') {
   if (!rest[0] || !rest[1]) usage()
   const rooms = rest[1].split(',').map(s => s.trim()).filter(Boolean)
@@ -74,6 +84,7 @@ function usage() {
   porch token add <name> [--rooms a,b] [--read-only]
   porch token list
   porch token rooms <name> <a,b|*>          change the rooms a token may use
+  porch token rename <old> <new>            rename an agent and keep its history (new may be family/member)
   porch token revoke <name>
   porch group add <name> <agent,agent|*> [--title "Title"]
                                             make or change a group; * opens it to every agent
