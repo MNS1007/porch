@@ -5,6 +5,7 @@ import { join, dirname } from 'node:path'
 import { openDb } from './db.js'
 import { createServer } from './server.js'
 import { openVault } from './vault/store.js'
+import { wakeFromEnv } from './wake.js'
 
 if (existsSync('.env')) process.loadEnvFile('.env')
 
@@ -27,9 +28,11 @@ if (!cmd || cmd === 'serve') {
   const vaultPort = Number(process.env.PORCH_VAULT_PORT || 7778)
   if (vaultOn) mkdirSync(dirname(vaultPath), { recursive: true })
   const vault = vaultOn ? openVault(vaultPath) : null
-  createServer(store, { vault, vaultPort }).listen(port, host, () => {
+  const wake = wakeFromEnv()
+  createServer(store, { vault, vaultPort, wake }).listen(port, host, () => {
     console.log(`porch is running at http://${host}:${port}`)
     console.log(`data: ${dbPath}`)
+    console.log(`instant wake: ${wake ? wake.agents.join(', ') : 'off'}`)
     if (vault) console.log(`vault: http://127.0.0.1:${vaultPort}/vault/ (this computer only), data: ${vaultPath}`)
     if (!store.agents().length) console.log('No agents yet. Add one with: porch token add <name>')
   })

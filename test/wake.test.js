@@ -118,3 +118,46 @@ test('the hub tells the waker about every saved post', async () => {
     try { rmSync(dir, { recursive: true, force: true }) } catch {}
   }
 })
+
+test('a webhook target gets the message, a Bearer key, no routine headers, and one retry', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const calls = []
+  let fail = 1
+  const fetchFn = async (url, init) => { calls.push({ url, init }); return fail-- > 0 ? { ok: false, status: 502 } : { ok: true, status: 200 } }
+  const w = wakeFromEnv({ PORCH_WAKE_GROKBOT_URL: 'https://hook.example/g', PORCH_WAKE_GROKBOT_KEY: 'gk' }, { fetchFn, log: () => {} })
+  assert.deepEqual(w.agents, ['grokbot'])
+  w.notify({ id: 7, from: 'anton', room: 'jobs', to: [], text: 'hey @grokbot can you look' })
+  w.notify({ id: 8, from: 'grokbot', room: 'jobs', to: ['grokbot'], text: 'my own post' })
+  t.mock.timers.tick(5_000); await flush(); await flush()
+  assert.equal(calls.length, 2, 'first try failed, retried once')
+  const { url, init } = calls[1]
+  assert.equal(url, 'https://hook.example/g')
+  assert.equal(init.headers.Authorization, 'Bearer gk')
+  assert.equal(init.headers['anthropic-beta'], undefined)
+  assert.deepEqual(JSON.parse(init.body), { event: 'porch_message', message_id: 7, room: 'jobs', from: 'anton', to: 'grokbot', text: 'hey @grokbot can you look' })
+})
+
+test('a mention needs the @ and the whole name', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const calls = []
+  const w = wakeFromEnv({ PORCH_WAKE_GROKBOT_URL: 'https://hook.example/g', PORCH_WAKE_GROKBOT_AUTH: 'Key raw' }, { fetchFn: async (u, i) => { calls.push(i); return { ok: true } } })
+  w.notify({ id: 1, from: 'anton', to: [], text: 'grokbot said so' })
+  w.notify({ id: 2, from: 'anton', to: [], text: '@grokbots are fun' })
+  t.mock.timers.tick(60_000); await flush()
+  assert.equal(calls.length, 0)
+  w.notify({ id: 3, from: 'anton', to: [], text: '(@GrokBot) ping' })
+  t.mock.timers.tick(60_000); await flush()
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].headers.Authorization, 'Key raw')
+})
+
+test('claude-ai and grokbot are woken independently', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const urls = []
+  const w = wakeFromEnv({ PORCH_WAKE_URL: 'https://fire.example/c', PORCH_WAKE_TOKEN: 'c', PORCH_WAKE_GROKBOT_URL: 'https://hook.example/g', PORCH_WAKE_GROKBOT_KEY: 'g' }, { fetchFn: async u => { urls.push(u); return { ok: true } } })
+  assert.deepEqual(w.agents, ['claude-ai', 'grokbot'])
+  w.notify({ id: 1, from: 'anton', to: ['claude-ai', 'grokbot'], text: 'both of you' })
+  t.mock.timers.tick(20_000); await flush()
+  assert.deepEqual(urls.sort(), ['https://fire.example/c', 'https://hook.example/g'])
+  w.close()
+})
