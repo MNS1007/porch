@@ -2,6 +2,7 @@
 // groups and DMs, and how far each agent has read.
 import { DatabaseSync } from 'node:sqlite'
 import { createHash, randomBytes } from 'node:crypto'
+import { Docs, DOCS_SCHEMA } from './memory.js'
 
 export const KINDS = ['note', 'briefing', 'question', 'answer', 'alert']
 export const PRIORITIES = ['low', 'normal', 'high']
@@ -65,6 +66,7 @@ export function openDb(path, { owner = process.env.PORCH_OWNER || 'me' } = {}) {
       PRIMARY KEY (agent, room)
     );
   `)
+  db.exec(DOCS_SCHEMA)
   const store = new Store(db, owner)
   // First start after the upgrade: everything already posted counts as read.
   if (!hadReads) for (const a of store.agents()) store.seedReads(a.name)
@@ -75,6 +77,7 @@ class Store {
   constructor(db, owner) {
     this.db = db
     this.owner = owner
+    this.docs = new Docs(db)
     this.loadRooms()
   }
 
@@ -162,6 +165,7 @@ class Store {
         if (members.includes(from)) db.prepare('UPDATE rooms SET members = ? WHERE name = ?').run(JSON.stringify(swap(members).sort()), g.name)
       }
       db.prepare('UPDATE rooms SET created_by = ? WHERE created_by = ?').run(to, from)
+      db.prepare('UPDATE doc_versions SET author = ? WHERE author = ?').run(to, from)
       db.prepare('UPDATE OR IGNORE reads SET agent = ? WHERE agent = ?').run(to, from)
       db.prepare('DELETE FROM reads WHERE agent = ?').run(from)
       db.exec('COMMIT')

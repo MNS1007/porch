@@ -21,6 +21,17 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
     }
   }
 
+  // Something other than a message, such as a memory update. No id line, so
+  // a client's Last-Event-ID stays a message id.
+  function announce(event, data) {
+    for (const s of streams) s.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+  }
+
+  function wrote(doc) {
+    announce('memory', { type: 'memory', name: doc.name, version: doc.version, updated_at: doc.updated_at })
+    return doc
+  }
+
   // Shared by HTTP and MCP so both follow the same rules.
   const api = {
     post(agent, msg) {
@@ -69,6 +80,28 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
       store.markRead(agent.name, room, body.id)
       return { ok: true }
     },
+    // Shared memory: every token reads it, tokens that can post write it.
+    memory: {
+      read: (agent, name = 'memory') => store.docs.get(name),
+      replace(agent, body, name = 'memory') {
+        if (!agent.canPost) throw httpError(403, 'This token can read but not write.')
+        return wrote(store.docs.replace(name, String(body.text ?? ''), body.base_version, agent.name))
+      },
+      patch(agent, body, name = 'memory') {
+        if (!agent.canPost) throw httpError(403, 'This token can read but not write.')
+        return wrote(store.docs.patchSection(name, body.section, body.text, body.base_version, agent.name))
+      },
+      history: (agent, name = 'memory') => store.docs.history(name),
+      version(agent, version, name = 'memory') {
+        const v = store.docs.version(name, version)
+        if (!v) throw httpError(404, `No version ${version}.`)
+        return v
+      },
+      restore(agent, body, name = 'memory') {
+        if (!agent.owner || !agent.canPost) throw httpError(403, 'Only the owner can restore a version.')
+        return wrote(store.docs.restore(name, Number(body.version), agent.name))
+      },
+    },
     agents() {
       // An agent holding the live stream open counts as online even if it sends nothing.
       const live = new Set([...streams].map(s => s.agent.name))
@@ -116,6 +149,12 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
       if (url.pathname === '/v1/conversations' && req.method === 'GET') return json(res, 200, api.conversations(agent))
       if (url.pathname === '/v1/groups' && req.method === 'POST') return json(res, 201, api.saveGroup(agent, parseJson(await readBody(req))))
       if (url.pathname === '/v1/read' && req.method === 'POST') return json(res, 200, api.markRead(agent, parseJson(await readBody(req))))
+      if (url.pathname === '/v1/memory' && req.method === 'GET') return json(res, 200, api.memory.read(agent))
+      if (url.pathname === '/v1/memory' && req.method === 'PUT') return json(res, 200, api.memory.replace(agent, parseJson(await readBody(req))))
+      if (url.pathname === '/v1/memory' && req.method === 'PATCH') return json(res, 200, api.memory.patch(agent, parseJson(await readBody(req))))
+      if (url.pathname === '/v1/memory/history' && req.method === 'GET') return json(res, 200, api.memory.history(agent))
+      if (url.pathname.startsWith('/v1/memory/history/') && req.method === 'GET') return json(res, 200, api.memory.version(agent, url.pathname.slice(19)))
+      if (url.pathname === '/v1/memory/restore' && req.method === 'POST') return json(res, 200, api.memory.restore(agent, parseJson(await readBody(req))))
       if (url.pathname.startsWith('/v1/dm/') && req.method === 'GET') return json(res, 200, api.dm(agent, decodeURIComponent(url.pathname.slice(7))))
       if (url.pathname === '/v1/me' && req.method === 'GET') return json(res, 200, agent)
 
@@ -151,7 +190,8 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
 
       json(res, 404, { error: 'Not found' })
     } catch (err) {
-      json(res, err.status || 400, { error: err.message })
+      // A memory conflict also returns the current document, so the writer can redo its change.
+      json(res, err.status || 400, { error: err.message, ...err.current })
     }
   })
   return server
