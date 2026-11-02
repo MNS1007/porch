@@ -166,3 +166,10 @@ test('renaming an agent renames it in the history too', async () => {
   assert.ok(hist.some(h => h.author === 'claude/web'))
   assert.ok(!hist.some(h => h.author === 'claude-ai'))
 })
+
+test('the page has the memory view and calls only memory routes that exist', async () => {
+  const html = await (await fetch(base + '/')).text()
+  for (const id of ['memory-entry', 'mem-edit', 'mem-history']) assert.ok(html.includes(`id="${id}"`), id)
+  for (const path of ["'/v1/memory'", "'/v1/memory/history'", "'/v1/memory/history/'", "'/v1/memory/restore'", "'memory', onMemoryEvent"]) assert.ok(html.includes(path), path)
+  assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML/.test(html))
+})

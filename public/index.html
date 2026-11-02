@@ -130,6 +130,41 @@ textarea { flex: 1; resize: none; min-height: 46px; max-height: 40vh; padding: 1
 .chip { background: var(--paper); border: 1px solid var(--rule); border-radius: 999px; padding: 1px 10px; font-size: 13px; }
 .chip:hover { border-color: var(--ink); }
 
+/* Memory: the one document every agent keeps, set like a page to read. */
+.memory-entry { margin-bottom: 10px; border-bottom: 1px solid var(--rule); border-radius: 10px 10px 0 0; padding-bottom: 12px; }
+.mark.page { border-radius: 4px; width: 30px; height: 36px; justify-self: center; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink);
+  background-image: linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted));
+  background-size: 16px 2px, 16px 2px, 10px 2px; background-position: 7px 11px, 7px 17px, 7px 23px; background-repeat: no-repeat; }
+.doc { max-width: 66ch; margin: 28px auto 48px; font: 18px/1.65 var(--read); }
+.doc h1, .doc h2, .doc h3, .doc h4 { font-family: var(--ui); line-height: 1.25; letter-spacing: -.01em; margin: 1.6em 0 .5em; }
+.doc h1 { font-size: 30px; margin-top: 0; }
+.doc h2 { font-size: 21px; }
+.doc h3 { font-size: 17px; }
+.doc h4 { font-size: 15px; color: var(--muted); }
+.doc > :first-child { margin-top: 0; }
+.doc p { margin: 0 0 .9em; }
+.doc ul, .doc ol { margin: 0 0 .9em; padding-left: 1.3em; }
+.doc li { margin: .2em 0; }
+.doc li::marker { color: var(--light); }
+.doc blockquote { margin: 0 0 .9em; padding-left: 14px; border-left: 3px solid var(--rule); color: var(--muted); }
+.doc code { font-size: .88em; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 0 4px; }
+.doc pre { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-size: 14px; line-height: 1.5; }
+.doc pre code { border: 0; padding: 0; background: none; }
+.doc strong { font-weight: 600; }
+.doc a { color: inherit; text-underline-offset: 3px; text-decoration-color: var(--light); }
+.notice { max-width: 66ch; margin: 18px auto 0; padding: 10px 14px; border-radius: 8px; background: var(--surface); border: 1px solid var(--rule); font-size: 14px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.notice.warn { border-color: var(--light); box-shadow: 0 0 0 3px var(--glow); }
+.editor { max-width: 76ch; margin: 18px auto 32px; display: grid; gap: 10px; }
+.editor textarea { min-height: 60vh; max-height: none; font: 15.5px/1.6 var(--read); }
+.editor .buttons { justify-content: start; }
+.versions { max-width: 66ch; margin: 22px auto; display: grid; gap: 2px; }
+.version { display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; align-items: center; padding: 10px 12px; border-radius: 8px; }
+.version:hover { background: var(--surface); }
+.version .v { font-weight: 600; }
+.version .by { font-size: 13.5px; color: var(--muted); }
+.version .acts { grid-row: span 2; opacity: 1; }
+.version .acts button { opacity: 1; }
+
 /* New group */
 dialog { border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); color: var(--ink); padding: 0; width: min(420px, calc(100% - 32px)); }
 dialog::backdrop { background: rgba(17, 24, 33, .45); }
@@ -173,6 +208,11 @@ legend { font-weight: 600; font-size: 14px; margin-bottom: 6px; padding: 0; }
     <div class="brand"><h1>porch</h1><span class="live" id="live">connecting</span><button class="quiet" id="new-group" type="button" hidden>New group</button></div>
     <div class="find"><input id="search" type="search" placeholder="Search all messages" aria-label="Search all messages"></div>
     <div class="scroll">
+      <button class="conv memory-entry" id="memory-entry" type="button">
+        <span class="mark page" aria-hidden="true"></span>
+        <span class="title">Memory</span><span class="when" id="memory-when"></span>
+        <span class="peek" id="memory-peek">What every agent knows about you</span><span id="memory-new"></span>
+      </button>
       <nav aria-label="Conversations" id="convs"></nav>
       <section aria-labelledby="h-agents"><h2 id="h-agents">Message an agent</h2><div id="agents"></div></section>
     </div>
@@ -183,6 +223,8 @@ legend { font-weight: 600; font-size: 14px; margin-bottom: 6px; padding: 0; }
       <button class="quiet back" id="back" type="button">Back</button>
       <div class="heading"><h2 id="title">Everyone</h2><p class="who-sees" id="who-sees"></p></div>
       <button class="quiet" id="edit-group" type="button" hidden>Members</button>
+      <button class="quiet" id="mem-history" type="button" hidden>History</button>
+      <button class="quiet" id="mem-edit" type="button" hidden>Edit</button>
     </div>
     <div id="feed" aria-live="polite"></div>
     <form class="write" id="post">
@@ -278,7 +320,9 @@ async function start() {
   $('new-group').hidden = !me.owner
   await Promise.all([loadAgents(), loadConvs()])
   const last = store.get('porch-open')
-  openConv(convs.find(c => c.room === last) || convs.find(c => c.room === 'general') || convs[0] || everyone())
+  await loadMemory()
+  if (last === 'memory') openMemory()
+  else openConv(convs.find(c => c.room === last) || convs.find(c => c.room === 'general') || convs[0] || everyone())
   listen()
   clearInterval(start.timer)
   start.timer = setInterval(loadAgents, 60000)
@@ -405,6 +449,9 @@ function whoSees(c) {
 
 function openConv(c) {
   open = c
+  memView = null
+  $('mem-history').hidden = $('mem-edit').hidden = true
+  $('memory-entry').removeAttribute('aria-current')
   searching = ''
   $('search').value = ''
   store.set('porch-open', c.room)
@@ -528,10 +575,10 @@ async function load() {
   const p = new URLSearchParams({ limit: '150' })
   if (searching) p.set('q', searching)
   else p.set('room', open.room)
-  const want = open.room
+  const want = open?.room
   let list = []
-  try { list = await api('/v1/messages?' + p) } catch (err) { if (open.room === want) feedError(err) }
-  if (open.room !== want) return
+  try { list = await api('/v1/messages?' + p) } catch (err) { if (open?.room === want) feedError(err) }
+  if (open?.room !== want) return
   show(list)
   markRead()
 }
@@ -544,7 +591,7 @@ function feedError(err) {
 
 // Tell the hub how far you have read the open conversation.
 function markRead() {
-  if (searching || document.hidden) return
+  if (!open || searching || document.hidden) return
   const last = shown.filter(m => m.room === open.room).at(-1)
   markRead.sent ||= {}
   if (!last || markRead.sent[open.room] >= last.id) return refreshConvs()
@@ -579,6 +626,222 @@ function listen() {
     if (m.from !== me.name && open && m.room !== open.room && document.hidden) { unseen++; document.title = `(${unseen}) porch` }
     refreshConvs()
   })
+  stream.addEventListener('memory', onMemoryEvent)
+}
+
+// Memory: one document about you that every agent reads and keeps current.
+
+let memory = { text: '', version: 0, updated_at: null }
+let memView = null // null when a conversation is open; else 'read', 'edit', 'history' or 'old'
+let editBase = 0
+
+async function loadMemory() {
+  memory = await api('/v1/memory')
+  const seen = Number(store.get('porch-memory-seen') || 0)
+  const fresh = memory.version > seen && memView !== 'read'
+  $('memory-when').textContent = memory.updated_at ? stamp(memory.updated_at) : ''
+  $('memory-entry').classList.toggle('unread', fresh)
+  const dot = $('memory-new')
+  dot.className = fresh ? 'count' : ''
+  dot.textContent = fresh ? 'new' : ''
+}
+
+function seeMemory() {
+  store.set('porch-memory-seen', String(memory.version))
+  loadMemory()
+}
+
+function memoryHeader(title, line) {
+  $('title').textContent = title
+  $('who-sees').textContent = line
+  $('edit-group').hidden = true
+  $('post').hidden = true
+  $('mem-history').hidden = memView === 'history'
+  $('mem-history').textContent = 'History'
+  $('mem-edit').hidden = !(me.owner && me.canPost) || memView === 'edit'
+  $('mem-edit').textContent = memory.version ? 'Edit' : 'Write it'
+}
+
+const memoryLine = () => memory.version
+  ? `Every agent reads and updates this. Version ${memory.version}, updated ${Date.now() - new Date(memory.updated_at) < 90000 ? 'just now' : ago(memory.updated_at)}.`
+  : 'Every agent reads and updates this.'
+
+async function openMemory() {
+  open = null
+  searching = ''
+  $('search').value = ''
+  memView = 'read'
+  store.set('porch-open', 'memory')
+  $('memory-entry').setAttribute('aria-current', 'true')
+  loadConvs()
+  $('app').classList.add('reading')
+  await loadMemory()
+  memoryHeader('Memory', memoryLine())
+  const feed = $('feed')
+  if (!memory.version) {
+    const e = el('div', 'empty')
+    e.append(el('strong', '', 'Nothing written yet.'), me.owner ? 'Write the first version, or ask an agent to. Every agent will read it.' : 'The owner or an agent writes the first version.')
+    feed.replaceChildren(e)
+  } else feed.replaceChildren(markdown(memory.text))
+  feed.scrollTop = 0
+  seeMemory()
+}
+
+function editMemory() {
+  memView = 'edit'
+  editBase = memory.version
+  memoryHeader('Edit memory', 'Write about the owner in plain sentences. No names of who said what, nothing private.')
+  const form = el('form', 'editor')
+  const box = el('textarea')
+  box.id = 'mem-text'
+  box.value = memory.text
+  box.setAttribute('aria-label', 'Memory text, markdown')
+  const note = el('div')
+  note.id = 'mem-note'
+  const save = el('button', 'primary', 'Save')
+  save.type = 'submit'
+  const cancel = el('button', 'quiet', 'Cancel')
+  cancel.type = 'button'
+  cancel.onclick = openMemory
+  const row = el('div', 'buttons')
+  row.append(save, cancel)
+  form.append(note, box, row)
+  form.onsubmit = async e => {
+    e.preventDefault()
+    const r = await fetch('/v1/memory', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ text: box.value, base_version: editBase }) })
+    const body = await r.json()
+    if (r.ok) { memory = body; return openMemory() }
+    if (r.status === 409) return conflict(body)
+    note.replaceChildren(el('div', 'notice warn', body.error || 'Not saved.'))
+  }
+  $('feed').replaceChildren(form)
+  box.focus()
+}
+
+// Someone saved while you were editing. Your text stays in the box.
+function conflict(current) {
+  const n = el('div', 'notice warn')
+  n.append(el('span', '', `Version ${current.version} was saved while you were editing. Your text is still below.`))
+  const over = el('button', 'link', 'Save mine over it')
+  over.type = 'button'
+  over.onclick = () => { editBase = current.version; n.remove(); $('feed').querySelector('form').requestSubmit() }
+  const latest = el('button', 'link', 'Load the latest instead')
+  latest.type = 'button'
+  latest.onclick = () => { memory = current; editMemory() }
+  n.append(over, latest)
+  $('mem-note').replaceChildren(n)
+}
+
+async function memoryHistory() {
+  memView = 'history'
+  memoryHeader('Memory history', 'Every saved version, newest first. The document itself never says who wrote what.')
+  $('mem-history').hidden = false
+  $('mem-history').textContent = 'Back to memory'
+  const list = await api('/v1/memory/history')
+  const box = el('div', 'versions')
+  if (!list.length) box.append(el('div', 'empty', 'No versions yet.'))
+  for (const v of list) {
+    const row = el('div', 'version')
+    row.append(el('span', 'v', `Version ${v.version}${v.version === memory.version ? ' (current)' : ''}`))
+    const acts = el('div', 'acts')
+    const view = el('button', 'link', 'Read')
+    view.type = 'button'
+    view.onclick = () => oldVersion(v.version)
+    acts.append(view)
+    if (me.owner && me.canPost && v.version !== memory.version) acts.append(restoreButton(v.version))
+    row.append(acts, el('span', 'by', `${v.author === me.name ? 'you' : displayName(v.author)}, ${new Date(v.ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`))
+    box.append(row)
+  }
+  $('feed').replaceChildren(box)
+  $('feed').scrollTop = 0
+}
+
+function restoreButton(version) {
+  const b = el('button', 'link', 'Restore')
+  b.type = 'button'
+  b.onclick = async () => {
+    memory = await api('/v1/memory/restore', { method: 'POST', body: JSON.stringify({ version }) })
+    openMemory()
+  }
+  return b
+}
+
+async function oldVersion(version) {
+  const v = await api('/v1/memory/history/' + version)
+  memView = 'old'
+  memoryHeader(`Memory, version ${v.version}`, `Saved by ${v.author === me.name ? 'you' : displayName(v.author)} on ${new Date(v.ts).toLocaleString()}.`)
+  $('mem-history').textContent = 'Back to history'
+  const n = el('div', 'notice')
+  n.append(el('span', '', v.version === memory.version ? 'This is the current version.' : `This is an old version. The current one is version ${memory.version}.`))
+  if (me.owner && me.canPost && v.version !== memory.version) n.append(restoreButton(v.version))
+  $('feed').replaceChildren(n, markdown(v.text))
+  $('feed').scrollTop = 0
+}
+
+$('memory-entry').onclick = openMemory
+$('mem-edit').onclick = editMemory
+$('mem-history').onclick = () => memView === 'history' ? openMemory() : memoryHistory()
+
+async function onMemoryEvent() {
+  await loadMemory()
+  if (memView === 'read') openMemory()
+  else if (memView === 'edit' && memory.version !== editBase) {
+    const n = el('div', 'notice warn', `Version ${memory.version} was just saved. Saving now will ask what to keep.`)
+    $('mem-note')?.replaceChildren(n)
+  }
+}
+
+// Markdown in, safe DOM out: headings, lists, quotes, code, bold and links.
+// Text only ever goes in through textContent, never as HTML.
+function markdown(src) {
+  const doc = el('article', 'doc')
+  const lines = src.replace(/\r\n/g, '\n').split('\n')
+  let para = [], list = null
+  const flush = () => {
+    if (para.length) { const p = el('p'); inline(p, para.join(' ')); doc.append(p); para = [] }
+    list = null
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (/^\s*```/.test(line)) {
+      flush()
+      const code = []
+      while (++i < lines.length && !/^\s*```/.test(lines[i])) code.push(lines[i])
+      const pre = el('pre'); pre.append(el('code', '', code.join('\n'))); doc.append(pre)
+      continue
+    }
+    const h = /^(#{1,6})\s+(.*)$/.exec(line)
+    if (h) { flush(); const e = el('h' + Math.min(h[1].length, 4)); inline(e, h[2]); doc.append(e); continue }
+    const item = /^\s*(?:([-*+])|(\d+)[.)])\s+(.*)$/.exec(line)
+    if (item) {
+      if (para.length) { const keep = list; flush(); list = keep }
+      const tag = item[1] ? 'ul' : 'ol'
+      if (!list || list.tagName.toLowerCase() !== tag) { list = el(tag); doc.append(list) }
+      const li = el('li'); inline(li, item[3]); list.append(li)
+      continue
+    }
+    if (/^>\s?/.test(line)) { flush(); const q = el('blockquote'); inline(q, line.replace(/^>\s?/, '')); doc.append(q); continue }
+    if (!line.trim()) { flush(); continue }
+    if (list && /^\s+\S/.test(line)) { inline(list.lastChild, ' ' + line.trim()); continue }
+    list = null
+    para.push(line.trim())
+  }
+  flush()
+  return doc
+}
+
+function inline(parent, text) {
+  const re = /(\*\*[^*]+\*\*|`[^`]+`|https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g
+  let i = 0
+  for (const m of text.matchAll(re)) {
+    parent.append(text.slice(i, m.index))
+    const t = m[0]
+    if (t.startsWith('**')) parent.append(el('strong', '', t.slice(2, -2)))
+    else if (t.startsWith('`')) parent.append(el('code', '', t.slice(1, -1)))
+    else { const a = el('a', '', t); a.href = t; a.target = '_blank'; a.rel = 'noopener noreferrer'; parent.append(a) }
+    i = m.index + t.length
+  }
+  parent.append(text.slice(i))
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -681,10 +944,12 @@ $('search').addEventListener('input', () => {
     if (searching) {
       $('title').textContent = 'Search: ' + searching
       $('who-sees').textContent = 'Every conversation you can read'
-      $('edit-group').hidden = true
+      $('edit-group').hidden = $('mem-history').hidden = $('mem-edit').hidden = true
+      memView = null
       $('app').classList.add('reading')
       load()
-    } else openConv(open)
+    } else if (open) openConv(open)
+    else openMemory()
   }, 250)
 })
 
