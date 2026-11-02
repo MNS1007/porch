@@ -40,7 +40,9 @@ if (!cmd || cmd === 'serve') {
   }
 } else if (cmd === 'token' && (sub === 'list' || sub === 'ls')) {
   for (const a of store.agents()) {
-    console.log(`${a.name.padEnd(20)} rooms: ${a.rooms.join(',').padEnd(20)} ${a.canPost ? 'post' : 'read'}  last seen: ${a.lastSeen || 'never'}`)
+    if (a.managed_by) { console.log(`${a.name.padEnd(20)} spoken for by ${a.managed_by}  last seen: ${a.lastSeen || 'never'}`); continue }
+    const acts = a.acts.length ? `  acts for: ${a.acts.join(',')}` : ''
+    console.log(`${a.name.padEnd(20)} rooms: ${a.rooms.join(',').padEnd(20)} ${a.canPost ? 'post' : 'read'}  last seen: ${a.lastSeen || 'never'}${acts}`)
   }
 } else if (cmd === 'token' && sub === 'rename') {
   if (!rest[0] || !rest[1]) usage()
@@ -48,6 +50,16 @@ if (!cmd || cmd === 'serve') {
     const to = store.renameAgent(rest[0], rest[1])
     console.log(`Renamed "${rest[0]}" to "${to}". Its token still works. Its messages, DMs, groups and read state moved with it.`)
     console.log('The hub can stay running. Restart that agent (or its live stream) so it picks up the new name.')
+  } catch (err) {
+    console.error(err.message)
+    process.exit(1)
+  }
+} else if (cmd === 'token' && sub === 'acts') {
+  if (!rest[0] || !rest[1]) usage()
+  const patterns = rest[1] === 'none' ? [] : rest[1].split(',').map(s => s.trim()).filter(Boolean)
+  try {
+    if (!store.setActs(rest[0], patterns)) { console.error(`No agent with a token named "${rest[0]}".`); process.exit(1) }
+    console.log(patterns.length ? `"${rest[0]}" can now speak for: ${patterns.join(', ')}` : `"${rest[0]}" no longer speaks for anyone.`)
   } catch (err) {
     console.error(err.message)
     process.exit(1)
@@ -93,6 +105,8 @@ function usage() {
   porch token add <name> [--rooms a,b] [--read-only]
   porch token list
   porch token rooms <name> <a,b|*>          change the rooms a token may use
+  porch token acts <name> <family/*,...|none>
+                                            let a token speak for members it registers
   porch token rename <old> <new>            rename an agent and keep its history (new may be family/member)
   porch token revoke <name>
   porch group add <name> <agent,agent|*> [--title "Title"]

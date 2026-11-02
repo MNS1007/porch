@@ -71,6 +71,11 @@ export function openDb(path, { owner = process.env.PORCH_OWNER || 'me' } = {}) {
   if (!db.prepare("SELECT 1 FROM pragma_table_info('rooms') WHERE name = 'archived'").get()) {
     db.exec('ALTER TABLE rooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
   }
+  // Agents that speak for others: acts holds the name patterns a token may act
+  // for, managed_by marks a member that has no token and is spoken for.
+  for (const col of ['acts', 'managed_by']) {
+    if (!db.prepare("SELECT 1 FROM pragma_table_info('agents') WHERE name = ?").get(col)) db.exec(`ALTER TABLE agents ADD COLUMN ${col} TEXT`)
+  }
   const store = new Store(db, owner)
   // First start after the upgrade: everything already posted counts as read.
   if (!hadReads) for (const a of store.agents()) store.seedReads(a.name)
@@ -95,6 +100,62 @@ class Store {
     this.meta = new Map(this.db.prepare('SELECT * FROM rooms').all().map(r => [r.name, {
       name: r.name, type: r.type, title: r.title, members: r.members ? JSON.parse(r.members) : null, archived: !!r.archived,
     }]))
+    // manager name -> the members it speaks for
+    this.managed = new Map()
+    for (const r of this.db.prepare('SELECT name, managed_by FROM agents WHERE managed_by IS NOT NULL').all()) {
+      if (!this.managed.has(r.managed_by)) this.managed.set(r.managed_by, new Set())
+      this.managed.get(r.managed_by).add(r.name)
+    }
+  }
+
+  // The members this agent speaks for.
+  membersOf(name) {
+    this.fresh()
+    return this.managed.get(name) || new Set()
+  }
+
+  // Which name patterns a token may act for: "claude-code/*" or an exact name.
+  setActs(name, patterns) {
+    for (const p of patterns) if (!PATTERN.test(p)) throw new Error(`"${p}" is not a pattern. Use family/* or a name.`)
+    return this.db.prepare('UPDATE agents SET acts = ? WHERE name = ? AND managed_by IS NULL')
+      .run(patterns.length ? JSON.stringify(patterns) : null, name).changes > 0
+  }
+
+  // Add a member that the manager speaks for. Doing it again changes nothing.
+  addMember(manager, name) {
+    name = String(name || '').trim().toLowerCase()
+    if (!AGENT.test(name)) throw withStatus(400, 'Agent names use lowercase letters, digits, - and _, with at most one / for a family.')
+    if (!actsFor(manager, name)) throw withStatus(403, `This token cannot act for "${name}".`)
+    const cur = this.db.prepare('SELECT managed_by FROM agents WHERE name = ?').get(name)
+    if (cur && cur.managed_by === manager.name) return this.agent(name)
+    if (cur) throw withStatus(409, cur.managed_by ? `"${name}" is spoken for by ${cur.managed_by}.` : `"${name}" has its own token.`)
+    this.db.prepare('INSERT INTO agents (name, token_hash, rooms, can_post, created, managed_by) VALUES (?, ?, ?, 0, ?, ?)')
+      .run(name, 'managed:' + name, '[]', new Date().toISOString(), manager.name)
+    this.seedReads(name)
+    this.loadRooms()
+    return this.agent(name)
+  }
+
+  // Remove a member. Its messages and DMs stay.
+  removeMember(manager, name) {
+    if (!actsFor(manager, name)) throw withStatus(403, `This token cannot act for "${name}".`)
+    const gone = this.db.prepare('DELETE FROM agents WHERE name = ? AND managed_by = ?').run(name, manager.name).changes > 0
+    if (!gone) throw withStatus(404, `${manager.name} does not speak for "${name}".`)
+    this.loadRooms()
+    return { ok: true }
+  }
+
+  // The member a manager posts as, checked: in its patterns and registered by it.
+  speakAs(manager, name) {
+    name = String(name || '').trim().toLowerCase()
+    if (!actsFor(manager, name)) throw withStatus(403, `This token cannot act for "${name}".`)
+    if (!this.membersOf(manager.name).has(name)) throw withStatus(403, `"${name}" is not registered. POST /v1/agents {"name": "${name}"} first.`)
+    this.db.prepare('UPDATE agents SET last_seen = ? WHERE name = ?').run(new Date().toISOString(), name)
+    return { name, rooms: manager.rooms, canPost: manager.canPost, owner: false, acts: [], managedBy: manager.name }
+  }
+
+  agent(name) {
+    return this.agents().find(a => a.name === name) || null
   }
 
   // Hide a group from the list, or bring it back. An open room with no row gets one.
@@ -114,6 +175,8 @@ class Store {
 
   addAgent(name, { rooms = ['*'], canPost = true } = {}) {
     if (!AGENT.test(name)) throw new Error('Agent names use lowercase letters, digits, - and _, up to 40 characters, with at most one / for a family (claude-code/renfort).')
+    const managed = this.db.prepare('SELECT managed_by FROM agents WHERE name = ? AND managed_by IS NOT NULL').get(name)
+    if (managed) throw new Error(`"${name}" is spoken for by ${managed.managed_by}. Remove it there first.`)
     const token = 'porch_' + randomBytes(24).toString('base64url')
     this.db.prepare('INSERT INTO agents (name, token_hash, rooms, can_post, created) VALUES (?, ?, ?, ?, ?)')
       .run(name, hash(token), JSON.stringify(rooms), canPost ? 1 : 0, new Date().toISOString())
@@ -139,8 +202,11 @@ class Store {
   }
 
   agents() {
-    return this.db.prepare('SELECT name, rooms, can_post, created, last_seen FROM agents ORDER BY name').all()
-      .map(a => ({ name: a.name, ...family(a.name), rooms: JSON.parse(a.rooms), canPost: !!a.can_post, created: a.created, lastSeen: a.last_seen }))
+    return this.db.prepare('SELECT name, rooms, can_post, created, last_seen, acts, managed_by FROM agents ORDER BY name').all()
+      .map(a => ({
+        name: a.name, ...family(a.name), rooms: JSON.parse(a.rooms), canPost: !!a.can_post, created: a.created, lastSeen: a.last_seen,
+        acts: a.acts ? JSON.parse(a.acts) : [], managed_by: a.managed_by || null,
+      }))
   }
 
   // Rename an agent everywhere and keep its history: its token, the messages it
@@ -157,6 +223,8 @@ class Store {
     db.exec('BEGIN IMMEDIATE')
     try {
       db.prepare('UPDATE agents SET name = ? WHERE name = ?').run(to, from)
+      db.prepare('UPDATE agents SET managed_by = ? WHERE managed_by = ?').run(to, from)
+      db.prepare("UPDATE agents SET token_hash = ? WHERE name = ? AND token_hash LIKE 'managed:%'").run('managed:' + to, to)
       db.prepare('UPDATE messages SET sender = ? WHERE sender = ?').run(to, from)
       const addressed = db.prepare("SELECT id, recipients FROM messages WHERE EXISTS (SELECT 1 FROM json_each(recipients) WHERE value = ?)").all(from)
       const setTo = db.prepare('UPDATE messages SET recipients = ? WHERE id = ?')
@@ -196,10 +264,10 @@ class Store {
 
   agentForToken(token) {
     if (!token) return null
-    const a = this.db.prepare('SELECT name, rooms, can_post FROM agents WHERE token_hash = ?').get(hash(token))
+    const a = this.db.prepare('SELECT name, rooms, can_post, acts FROM agents WHERE token_hash = ? AND managed_by IS NULL').get(hash(token))
     if (!a) return null
     this.db.prepare('UPDATE agents SET last_seen = ? WHERE name = ?').run(new Date().toISOString(), a.name)
-    return { name: a.name, rooms: JSON.parse(a.rooms), canPost: !!a.can_post, owner: a.name === this.owner }
+    return { name: a.name, rooms: JSON.parse(a.rooms), canPost: !!a.can_post, owner: a.name === this.owner, acts: a.acts ? JSON.parse(a.acts) : [] }
   }
 
   // Rooms, groups and DMs
@@ -214,9 +282,18 @@ class Store {
 
   // The owner, tokens with every room, tokens that list the room, and members may read.
   // Looked up on every check, so a new group member gets messages on an open stream.
+  // A manager also reads the DMs and groups of the members it speaks for.
   canRead(agent, name) {
     if (agent.owner || agent.rooms.includes('*') || agent.rooms.includes(name)) return true
-    return isMember(this.room(name), agent.name)
+    const r = this.room(name)
+    return isMember(r, agent.name) || [...this.membersOf(agent.name)].some(m => isMember(r, m) || (r.type === 'dm' && name.slice(3).split('+').includes(m)))
+  }
+
+  // A message is visible if its room is, or if it is addressed to a member the reader speaks for.
+  canSee(agent, msg) {
+    if (this.canRead(agent, msg.room)) return true
+    const mine = this.membersOf(agent.name)
+    return msg.to.some(n => mine.has(n))
   }
 
   // Only the two members, and the owner, write in a DM.
@@ -229,7 +306,8 @@ class Store {
   readable(agent) {
     if (agent.owner || agent.rooms.includes('*')) return null
     this.fresh()
-    const mine = [...this.meta.values()].filter(r => isMember(r, agent.name)).map(r => r.name)
+    const names = [agent.name, ...this.membersOf(agent.name)]
+    const mine = [...this.meta.values()].filter(r => names.some(n => isMember(r, n))).map(r => r.name)
     return [...new Set([EVERYONE, ...agent.rooms, ...mine])]
   }
 
@@ -278,14 +356,16 @@ class Store {
     const agentNames = new Set(this.agents().map(a => a.name))
     const last = new Map(this.db.prepare('SELECT m.* FROM messages m JOIN (SELECT MAX(id) AS id FROM messages GROUP BY room) x ON x.id = m.id').all()
       .map(r => [r.room, toMessage(r)]))
+    // A manager's list also holds its members' conversations, and what it posted for them is not unread.
+    const names = [agent.name, ...this.membersOf(agent.name)]
     const unread = new Map(this.db.prepare(`SELECT m.room, COUNT(*) AS n FROM messages m LEFT JOIN reads r ON r.agent = ? AND r.room = m.room
-      WHERE m.id > COALESCE(r.last_id, 0) AND m.sender != ? GROUP BY m.room`).all(agent.name, agent.name).map(r => [r.room, r.n]))
+      WHERE m.id > COALESCE(r.last_id, 0) AND m.sender NOT IN (${names.map(() => '?').join(',')}) GROUP BY m.room`).all(agent.name, ...names).map(r => [r.room, r.n]))
     const out = []
     const tokenRooms = agent.rooms.filter(r => r !== '*')
     for (const name of new Set([EVERYONE, ...tokenRooms, ...this.meta.keys(), ...last.keys()])) {
       if (!this.canRead(agent, name)) continue
       const r = this.room(name)
-      if (!agent.owner && r.members && !isMember(r, agent.name)) continue
+      if (!agent.owner && r.members && !names.some(n => isMember(r, n))) continue
       if (r.archived && !archived) continue
       let title = r.title || (r.type === 'dm' ? dmTitle(name, agent.name) : name)
       // A group named like an agent reads "#anton", so it is not taken for the DM.
@@ -339,11 +419,18 @@ class Store {
   }
 
   // rooms: list the reader may see, or null for all
-  list({ rooms = null, room, after = 0, from, to, q, reply_to, limit = 50 } = {}) {
+  // alsoTo: names whose addressed messages are visible outside those rooms
+  list({ rooms = null, alsoTo = [], room, after = 0, from, to, q, reply_to, limit = 50 } = {}) {
     const where = ['m.id > ?']
     const args = [Number(after) || 0]
     if (room) { where.push('m.room = ?'); args.push(room) }
-    if (rooms) { where.push(`m.room IN (${rooms.map(() => '?').join(',') || "''"})`); args.push(...rooms) }
+    if (rooms) {
+      const inRooms = `m.room IN (${rooms.map(() => '?').join(',') || "''"})`
+      if (alsoTo.length) {
+        where.push(`(${inRooms} OR EXISTS (SELECT 1 FROM json_each(m.recipients) WHERE value IN (${alsoTo.map(() => '?').join(',')})))`)
+        args.push(...rooms, ...alsoTo)
+      } else { where.push(inRooms); args.push(...rooms) }
+    }
     if (from) { where.push('m.sender = ?'); args.push(from) }
     if (to) { where.push('EXISTS (SELECT 1 FROM json_each(m.recipients) WHERE value = ?)'); args.push(to) }
     if (reply_to) { where.push('m.reply_to = ?'); args.push(Number(reply_to)) }
@@ -381,6 +468,16 @@ export function roomName(raw) {
   }
   if (!NAME.test(room)) throw new Error('Room names use lowercase letters, digits, - and _.')
   return room
+}
+
+// "claude-code/*" covers every member of the family; anything else is an exact name.
+const PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}(?:\/(?:\*|[a-z0-9][a-z0-9_-]{0,39}))?$/
+function actsFor(agent, name) {
+  return (agent.acts || []).some(p => p.endsWith('/*') ? name.startsWith(p.slice(0, -1)) && name.length > p.length - 1 : p === name)
+}
+
+function withStatus(status, message) {
+  return Object.assign(new Error(message), { status })
 }
 
 const isMember = (room, name) => !!room.members && (room.members.includes('*') || room.members.includes(name))

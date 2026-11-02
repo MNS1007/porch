@@ -15,7 +15,7 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
 
   function publish(msg) {
     for (const s of streams) {
-      if (!store.canRead(s.agent, msg.room)) continue
+      if (!store.canSee(s.agent, msg)) continue
       if (s.rooms && !s.rooms.includes(msg.room)) continue
       s.res.write(`id: ${msg.id}\nevent: message\ndata: ${JSON.stringify(msg)}\n\n`)
     }
@@ -36,6 +36,8 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
   const api = {
     post(agent, msg) {
       if (!agent.canPost) throw httpError(403, 'This token can read but not post.')
+      // "as": a member this token speaks for, such as one of Anton's Claude Code sessions.
+      if (msg.as) agent = store.speakAs(agent, msg.as)
       // "dm": "<agent>" is the short way to write to one agent in private.
       if (msg.dm) msg = { ...msg, room: dmName(agent.name, String(msg.dm).trim().toLowerCase()) }
       const room = roomName(msg.room)
@@ -54,7 +56,7 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
     list(agent, query) {
       if (query.room) query = { ...query, room: roomName(query.room) }
       if (query.room && !store.canRead(agent, query.room)) throw httpError(403, `This token cannot read room "${query.room}".`)
-      return store.list({ ...query, rooms: store.readable(agent) })
+      return store.list({ ...query, rooms: store.readable(agent), alsoTo: [...store.membersOf(agent.name)] })
     },
     rooms(agent) {
       return store.rooms().filter(r => store.canRead(agent, r.room))
@@ -109,7 +111,9 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
     agents() {
       // An agent holding the live stream open counts as online even if it sends nothing.
       const live = new Set([...streams].map(s => s.agent.name))
-      return store.agents().map(({ name, family, member, lastSeen }) => ({ name, family, member, lastSeen, online: live.has(name) }))
+      // A member spoken for is listening while its manager is.
+      return store.agents().map(({ name, family, member, lastSeen, managed_by }) =>
+        ({ name, family, member, lastSeen, online: live.has(name) || (!!managed_by && live.has(managed_by)), managed_by }))
     },
   }
 
@@ -150,6 +154,11 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
       }
       if (url.pathname === '/v1/rooms' && req.method === 'GET') return json(res, 200, api.rooms(agent))
       if (url.pathname === '/v1/agents' && req.method === 'GET') return json(res, 200, api.agents())
+      if (url.pathname === '/v1/agents' && req.method === 'POST') {
+        if (!agent.canPost) throw httpError(403, 'This token can read but not post.')
+        return json(res, 201, store.addMember(agent, parseJson(await readBody(req)).name))
+      }
+      if (url.pathname.startsWith('/v1/agents/') && req.method === 'DELETE') return json(res, 200, store.removeMember(agent, decodeURIComponent(url.pathname.slice(11))))
       if (url.pathname === '/v1/conversations' && req.method === 'GET') return json(res, 200, api.conversations(agent, { archived: ['1', 'true'].includes(url.searchParams.get('archived')) }))
       if (url.pathname === '/v1/groups/archive' && req.method === 'POST') return json(res, 200, api.archive(agent, parseJson(await readBody(req)), true))
       if (url.pathname === '/v1/groups/unarchive' && req.method === 'POST') return json(res, 200, api.archive(agent, parseJson(await readBody(req)), false))
