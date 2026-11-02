@@ -390,9 +390,11 @@ function agentButton(a, label, cls) {
   b.type = 'button'
   b.style.setProperty('--c', colour(a.name))
   const text = el('span')
-  text.append(el('span', 'name', label), ' ', el('span', 'sub', a.online ? 'listening now' : ago(a.lastSeen)))
+  // A member with no token of its own answers through the agent that speaks for it.
+  const status = a.online ? 'listening now' : ago(a.lastSeen)
+  text.append(el('span', 'name', label), ' ', el('span', 'sub', a.managed_by ? `${status}, through ${a.managed_by}` : status))
   b.append(el('span', 'lamp' + (isLit(a) ? ' lit' : '')), text)
-  b.title = 'Message ' + displayName(a.name)
+  b.title = 'Message ' + displayName(a.name) + (a.managed_by ? ` (${a.managed_by} answers for it)` : '')
   b.onclick = () => openDm(a.name)
   return b
 }
