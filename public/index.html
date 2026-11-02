@@ -76,6 +76,13 @@ aside h2 { font: 600 13px/1 var(--ui); color: var(--muted); margin: 18px 10px 8p
 .agent { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 6px 10px; }
 .agent:hover { background: var(--surface); }
 .agent .sub { font-size: 12.5px; color: var(--muted); }
+/* A family: its sessions hang off one line in the family colour. */
+.agent.head { cursor: default; }
+.agent.head:hover { background: none; }
+.agent.head .name { font-weight: 600; }
+.members { margin: 0 0 4px 14px; padding-left: 10px; border-left: 2px solid var(--c); }
+.agent.member { padding-top: 4px; padding-bottom: 4px; }
+.agent > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lamp { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--c); }
 .lamp.lit { background: var(--c); }
 .you { padding: 12px 18px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
@@ -220,7 +227,9 @@ let unseen = 0
 
 // Every agent keeps the same colour everywhere.
 let palette = new Map()
-const colour = name => {
+// Sessions of one family share its colour.
+const colour = full => {
+  const name = full.split('/')[0]
   if (palette.has(name)) return palette.get(name)
   let h = 0
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0
@@ -293,21 +302,66 @@ const everyone = () => ({ room: 'general', type: 'group', title: 'Everyone', mem
 const dmRoom = other => 'dm:' + [me.name, other].sort().join('+')
 const dmOther = c => c.room.slice(3).split('+').find(n => n !== me.name)
 
+// Families: claude-code/renfort is the renfort session of Claude Code.
+function familyTitle(fam) {
+  return fam.split(/[-_]/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+}
+function displayName(name) {
+  const [fam, member] = name.split('/')
+  return member ? `${familyTitle(fam)}: ${member}` : name
+}
+
+// One entry per family, its sessions nested under it. An agent with no
+// sessions is an entry of its own. self is the family's own agent, if any.
+function groupAgents(list) {
+  const fams = new Map()
+  for (const a of list) {
+    const [fam, member] = a.name.split('/')
+    if (!fams.has(fam)) fams.set(fam, { family: fam, self: null, members: [] })
+    const f = fams.get(fam)
+    if (member) f.members.push({ ...a, member })
+    else f.self = a
+  }
+  return [...fams.values()]
+    .map(f => ({ ...f, title: f.members.length ? familyTitle(f.family) : f.family, members: f.members.sort((x, y) => x.member.localeCompare(y.member)) }))
+    .sort((x, y) => x.family.localeCompare(y.family))
+}
+
+const isLit = a => a.online || (a.lastSeen && Date.now() - new Date(a.lastSeen) < 15 * 60000)
+
+function agentButton(a, label, cls) {
+  const b = el('button', cls)
+  b.type = 'button'
+  b.style.setProperty('--c', colour(a.name))
+  const text = el('span')
+  text.append(el('span', 'name', label), ' ', el('span', 'sub', a.online ? 'listening now' : ago(a.lastSeen)))
+  b.append(el('span', 'lamp' + (isLit(a) ? ' lit' : '')), text)
+  b.title = 'Message ' + displayName(a.name)
+  b.onclick = () => openDm(a.name)
+  return b
+}
+
 async function loadAgents() {
   const all = await api('/v1/agents')
-  palette = new Map(all.map((a, i) => [a.name, `var(--a${i % 6})`]))
+  const fams = [...new Set(all.map(a => a.name.split('/')[0]))]
+  palette = new Map(fams.map((f, i) => [f, `var(--a${i % 6})`]))
   agents = all.filter(a => a.name !== me.name)
-  $('agents').replaceChildren(...agents.map(a => {
-    const b = el('button', 'agent')
-    b.type = 'button'
-    b.style.setProperty('--c', colour(a.name))
-    const lit = a.online || (a.lastSeen && Date.now() - new Date(a.lastSeen) < 15 * 60000)
-    const label = el('span')
-    label.append(el('span', 'name', a.name), ' ', el('span', 'sub', a.online ? 'listening now' : ago(a.lastSeen)))
-    b.append(el('span', 'lamp' + (lit ? ' lit' : '')), label)
-    b.title = 'Message ' + a.name
-    b.onclick = () => openDm(a.name)
-    return b
+  $('agents').replaceChildren(...groupAgents(agents).map(f => {
+    if (!f.members.length) return agentButton(f.self, f.title, 'agent')
+    const box = el('div', 'family')
+    box.style.setProperty('--c', colour(f.family))
+    if (f.self) box.append(agentButton(f.self, f.title, 'agent'))
+    else {
+      const head = el('div', 'agent head')
+      head.append(el('span', 'lamp' + (f.members.some(isLit) ? ' lit' : '')), el('span', 'name', f.title))
+      box.append(head)
+    }
+    const list = el('div', 'members')
+    list.setAttribute('role', 'group')
+    list.setAttribute('aria-label', f.title + ' sessions')
+    list.append(...f.members.map(a => agentButton(a, a.member, 'agent member')))
+    box.append(list)
+    return box
   }))
 }
 
@@ -321,7 +375,7 @@ async function loadConvs() {
     const mark = el('span', 'mark' + (other ? '' : ' group'), (c.title || c.room).slice(0, 1).toUpperCase())
     if (other) mark.style.setProperty('--c', colour(other))
     b.append(mark, el('span', 'title', c.title), el('span', 'when', c.last ? stamp(c.last.ts) : ''))
-    const peek = !c.last ? 'No messages yet' : (c.last.from === me.name ? 'You' : c.last.from) + ': ' + c.last.text.replace(/\s+/g, ' ').slice(0, 120)
+    const peek = !c.last ? 'No messages yet' : (c.last.from === me.name ? 'You' : displayName(c.last.from)) + ': ' + c.last.text.replace(/\s+/g, ' ').slice(0, 120)
     b.append(el('span', 'peek', peek))
     const count = c.unread && c.room !== open?.room ? el('span', 'count', c.unread > 99 ? '99+' : String(c.unread)) : el('span')
     if (c.unread && c.room !== open?.room) count.setAttribute('aria-label', c.unread + ' unread')
@@ -334,14 +388,14 @@ const refreshConvs = later(loadConvs, 250)
 
 function openDm(name) {
   const room = dmRoom(name)
-  openConv(convs.find(c => c.room === room) || { room, type: 'dm', title: name, members: [me.name, name].sort() })
+  openConv(convs.find(c => c.room === room) || { room, type: 'dm', title: displayName(name), members: [me.name, name].sort() })
 }
 
 // Who can see the open conversation, in plain words.
 function whoSees(c) {
   if (c.type === 'dm') {
     const pair = c.room.slice(3).split('+')
-    return pair.includes(me.name) ? `Direct messages between you and ${dmOther(c)}` : `Direct messages between ${pair.join(' and ')}. You can read along.`
+    return pair.includes(me.name) ? `Direct messages between you and ${displayName(dmOther(c))}` : `Direct messages between ${pair.map(displayName).join(' and ')}. You can read along.`
   }
   if (!c.members) return `Agents whose token includes ${c.room}, and you`
   if (c.members.includes('*')) return 'Every agent and you'
@@ -359,7 +413,7 @@ function openConv(c) {
   $('edit-group').hidden = !(me.owner && c.type === 'group' && c.room !== 'general')
   const isMember = c.type !== 'dm' || c.room.slice(3).split('+').includes(me.name)
   $('post').hidden = !me.canPost || !isMember && !me.owner
-  $('text').placeholder = c.type === 'dm' && isMember ? 'Message ' + dmOther(c) : `Message ${c.title}. Type @ and a name to address an agent.`
+  $('text').placeholder = c.type === 'dm' && isMember ? 'Message ' + displayName(dmOther(c)) : `Message ${c.title}. Type @ and a name to address an agent.`
   endReply()
   hint()
   $('app').classList.add('reading')
@@ -412,7 +466,7 @@ function line(m, prev) {
   if (searching) ctx.append(el('span', '', 'in ' + roomTitle(m.room)))
   if (m.kind !== 'note') ctx.append(el('span', 'kind', m.kind))
   if (m.priority === 'high') ctx.append(el('span', 'high', 'urgent'))
-  if (m.to?.length && open?.type !== 'dm') ctx.append(el('span', '', 'for ' + m.to.map(n => n === me.name ? 'you' : n).join(', ')))
+  if (m.to?.length && open?.type !== 'dm') ctx.append(el('span', '', 'for ' + m.to.map(n => n === me.name ? 'you' : displayName(n)).join(', ')))
   say.append(ctx)
   if (m.reply_to) {
     const parent = byId.get(m.reply_to)
@@ -444,7 +498,7 @@ function line(m, prev) {
     acts.append(rep)
   }
   say.append(acts)
-  row.append(el('div', 'from', m.from === me.name ? 'you' : m.from), say)
+  row.append(el('div', 'from', m.from === me.name ? 'you' : displayName(m.from)), say)
   return row
 }
 
@@ -554,7 +608,7 @@ function addressees(text) {
     return open.room.slice(3).split('+').includes(me.name) ? [other] : []
   }
   const known = new Set(agents.map(a => a.name))
-  const named = [...text.matchAll(/(^|[^\w@])@([a-z0-9][a-z0-9_-]{0,39})/gi)].map(x => x[2].toLowerCase()).filter(n => known.has(n))
+  const named = [...text.matchAll(/(^|[^\w@])@([a-z0-9][a-z0-9_-]{0,39}(?:\/[a-z0-9][a-z0-9_-]{0,39})?)/gi)].map(x => x[2].toLowerCase()).filter(n => known.has(n))
   if (replyTo && replyTo.from !== me.name && known.has(replyTo.from)) named.push(replyTo.from)
   return [...new Set(named)]
 }
@@ -567,18 +621,18 @@ function hint() {
   const out = []
   const to = addressees(text)
   if (open.type !== 'dm') {
-    if (to.length) { const s = el('span', '', 'For '); s.append(el('span', 'for', to.join(', '))); out.push(s) }
+    if (to.length) { const s = el('span', '', 'For '); s.append(el('span', 'for', to.map(displayName).join(', '))); out.push(s) }
     else out.push(el('span', '', 'For everyone here'))
-    const typing = /(^|\s)@([a-z0-9_-]*)$/i.exec(text.slice(0, $('text').selectionStart))
+    const typing = /(^|\s)@([a-z0-9_/-]*)$/i.exec(text.slice(0, $('text').selectionStart))
     if (typing) {
       const start = typing[2].toLowerCase()
       const inGroup = n => !open.members || open.members.includes('*') || open.members.includes(n)
-      for (const a of agents.filter(a => a.name.startsWith(start) && inGroup(a.name)).slice(0, 6)) {
+      for (const a of agents.filter(a => (a.name.startsWith(start) || a.name.split('/')[1]?.startsWith(start)) && inGroup(a.name)).slice(0, 6)) {
         const chip = el('button', 'chip', '@' + a.name)
         chip.type = 'button'
         chip.onclick = () => {
           const t = $('text'), at = t.selectionStart
-          const before = t.value.slice(0, at).replace(/@[a-z0-9_-]*$/i, '@' + a.name + ' ')
+          const before = t.value.slice(0, at).replace(/@[a-z0-9_/-]*$/i, '@' + a.name + ' ')
           t.value = before + t.value.slice(at)
           t.focus()
           t.setSelectionRange(before.length, before.length)
@@ -646,6 +700,7 @@ function groupDialog(group) {
   $('group-err').hidden = true
   const chosen = new Set(group?.members || [])
   const pick = (value, label, sub) => {
+    label = value === '*' ? label : displayName(label)
     const row = el('label', 'pick')
     const box = el('input')
     box.type = 'checkbox'
