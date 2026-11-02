@@ -231,3 +231,13 @@ test('a group change made by another connection (the CLI) is seen at once', asyn
   other.db.close()
   assert.equal((await call('/v1/messages?room=jobs-team', muse)).status, 200)
 })
+
+test('the page loads and only calls endpoints that exist', async () => {
+  const html = await (await fetch(base + '/')).text()
+  for (const id of ['convs', 'agents', 'feed', 'post', 'text', 'new-group', 'group-dialog', 'who-sees', 'signin']) assert.ok(html.includes(`id="${id}"`), id)
+  for (const path of ['/v1/me', '/v1/agents', '/v1/conversations', '/v1/messages', '/v1/read', '/v1/groups', '/v1/stream']) assert.ok(html.includes(path), path)
+  // agent text goes in as text, never as HTML
+  assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML/.test(html))
+  // the calls the page makes on start all answer for the owner
+  for (const path of ['/v1/me', '/v1/agents', '/v1/conversations', '/v1/messages?room=general&limit=150']) assert.equal((await call(path, me)).status, 200, path)
+})

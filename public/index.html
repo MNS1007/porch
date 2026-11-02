@@ -38,46 +38,62 @@ button { cursor: pointer; }
 .gate h1 { font: 700 44px/1 var(--ui); letter-spacing: -.03em; margin: 0; }
 .gate p { margin: 0; color: var(--muted); }
 .gate input { padding: 12px 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
-.gate .err { color: var(--alert); }
-.primary { background: var(--ink); color: var(--paper); border: 0; border-radius: 8px; padding: 11px 16px; font-weight: 600; }
-
-/* Shell */
-.app { height: 100%; display: grid; grid-template-columns: 248px 1fr; }
-.app > * { min-width: 0; }
-aside { border-right: 1px solid var(--rule); padding: 22px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 26px; }
-.brand { display: flex; align-items: baseline; justify-content: space-between; padding: 0 8px; }
-.brand h1 { font: 700 26px/1 var(--ui); letter-spacing: -.03em; margin: 0; }
-.live { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
-.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-.live.on::before { background: var(--light); box-shadow: 0 0 0 4px var(--glow); }
-aside h2 { font: 600 13px/1 var(--ui); color: var(--muted); margin: 0 8px 8px; }
-.list { display: grid; gap: 2px; }
-.item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; text-align: left; background: none; border: 0; border-radius: 8px; padding: 7px 8px; width: 100%; }
-.item:hover { background: var(--surface); }
-.item[aria-pressed="true"] { background: var(--surface); box-shadow: inset 0 0 0 1px var(--rule); }
-.item .sub { display: block; font-size: 12.5px; color: var(--muted); }
-.item .n { font-size: 12.5px; color: var(--muted); }
-.unread .name { font-weight: 700; }
-.unread .n { color: var(--ink); font-weight: 600; }
-.lamp { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--c); }
-.lamp.lit { background: var(--c); box-shadow: 0 0 0 4px var(--glow); }
-.hash { color: var(--muted); width: 10px; text-align: center; }
-.you { margin-top: auto; padding: 0 8px; font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.err { color: var(--alert); }
+.primary { background: var(--ink); color: var(--paper); border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 600; }
+.quiet { background: none; border: 1px solid var(--rule); border-radius: 8px; padding: 6px 12px; font-weight: 600; font-size: 13.5px; }
+.quiet:hover { background: var(--surface); }
 .link { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
 .link:hover { color: var(--ink); }
 
-/* Feed */
-main { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; height: 100%; }
-.bar { display: flex; gap: 16px; align-items: center; padding: 18px 32px; border-bottom: 1px solid var(--rule); }
-.bar h2 { font: 700 20px/1.2 var(--ui); letter-spacing: -.01em; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bar input { width: min(280px, 40vw); padding: 8px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+/* Shell */
+.app { height: 100%; display: grid; grid-template-columns: 300px 1fr; }
+.app > * { min-width: 0; }
+aside { border-right: 1px solid var(--rule); display: flex; flex-direction: column; min-height: 0; }
+.brand { display: flex; align-items: center; gap: 12px; padding: 20px 18px 12px; }
+.brand h1 { font: 700 26px/1 var(--ui); letter-spacing: -.03em; margin: 0; flex: 1; }
+.live { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.live.on::before { background: var(--light); box-shadow: 0 0 0 4px var(--glow); }
+.find { padding: 0 18px 10px; }
+.find input { width: 100%; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+.scroll { overflow-y: auto; flex: 1; padding: 0 8px 12px; }
+aside h2 { font: 600 13px/1 var(--ui); color: var(--muted); margin: 18px 10px 8px; }
+
+/* Conversation rows */
+.conv { display: grid; grid-template-columns: 36px 1fr auto; gap: 2px 12px; align-items: center; width: 100%; text-align: left; background: none; border: 0; border-radius: 10px; padding: 9px 10px; }
+.conv:hover { background: var(--surface); }
+.conv[aria-current="true"] { background: var(--surface); box-shadow: inset 0 0 0 1px var(--rule); }
+.mark { grid-row: span 2; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 15px; color: var(--surface); background: var(--c, var(--muted)); }
+.mark.group { border-radius: 10px; background: var(--ink); color: var(--paper); }
+.conv .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv .when { font-size: 12.5px; color: var(--muted); }
+.conv .peek { font-size: 13.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The porch light: a conversation with something new glows. */
+.count { justify-self: end; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--light); color: #17202b; font-size: 12.5px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 4px var(--glow); }
+.conv.unread .title, .conv.unread .peek { color: var(--ink); }
+.conv.unread .when { color: var(--light); font-weight: 600; }
+
+.agent { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 6px 10px; }
+.agent:hover { background: var(--surface); }
+.agent .sub { font-size: 12.5px; color: var(--muted); }
+.lamp { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--c); }
+.lamp.lit { background: var(--c); }
+.you { padding: 12px 18px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+
+/* Open conversation */
+main { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; height: 100%; min-height: 0; }
+.bar { display: flex; gap: 14px; align-items: center; padding: 14px 32px; border-bottom: 1px solid var(--rule); min-height: 72px; }
+.bar .heading { flex: 1; min-width: 0; }
+.bar h2 { font: 700 20px/1.2 var(--ui); letter-spacing: -.01em; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who-sees { font-size: 13.5px; color: var(--muted); margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.back { display: none; }
 #feed { overflow-y: auto; padding: 8px 32px 24px; }
 .day { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; margin: 22px 0 6px; }
 .day::after { content: ""; flex: 1; border-top: 1px solid var(--rule); }
 .line { display: grid; grid-template-columns: 112px minmax(0, 68ch) 1fr; column-gap: 20px; padding: 10px 0 4px; }
 .line.cont { padding-top: 0; }
-.who { font-weight: 700; color: var(--c); text-align: right; overflow-wrap: anywhere; padding-top: 1px; }
-.line.cont .who { visibility: hidden; }
+.line .from { font-weight: 700; color: var(--c); text-align: right; overflow-wrap: anywhere; padding-top: 1px; }
+.line.cont .from { visibility: hidden; }
 .say { min-width: 0; }
 .ctx { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0 12px; margin-bottom: 2px; }
 .ctx .kind { color: var(--ink); font-weight: 600; }
@@ -99,26 +115,36 @@ main { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; height: 1
 .line.new { animation: arrive 2.4s ease-out; border-radius: 8px; }
 
 /* Composer */
-form.say-it { border-top: 1px solid var(--rule); padding: 14px 32px 18px; display: grid; gap: 8px; background: var(--surface); }
-.opts { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); align-items: center; }
-.opts select { border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); padding: 3px 6px; }
+form.write { border-top: 1px solid var(--rule); padding: 12px 32px 16px; display: grid; gap: 6px; background: var(--surface); }
 .row { display: flex; gap: 10px; align-items: end; }
 textarea { flex: 1; resize: none; min-height: 46px; max-height: 40vh; padding: 11px 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); font: 16px/1.5 var(--read); }
-.replying { display: flex; gap: 10px; }
+.hint { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; min-height: 18px; }
+.hint .for { color: var(--ink); font-weight: 600; }
+.chip { background: var(--paper); border: 1px solid var(--rule); border-radius: 999px; padding: 1px 10px; font-size: 13px; }
+.chip:hover { border-color: var(--ink); }
+
+/* New group */
+dialog { border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); color: var(--ink); padding: 0; width: min(420px, calc(100% - 32px)); }
+dialog::backdrop { background: rgba(17, 24, 33, .45); }
+dialog form { padding: 22px; display: grid; gap: 14px; }
+dialog h2 { margin: 0; font: 700 20px/1.2 var(--ui); }
+dialog label.field { display: grid; gap: 6px; font-weight: 600; font-size: 14px; }
+dialog input[type=text] { padding: 9px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); font-weight: 400; }
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 40vh; overflow-y: auto; }
+legend { font-weight: 600; font-size: 14px; margin-bottom: 6px; padding: 0; }
+.pick { display: flex; gap: 10px; align-items: center; padding: 5px 2px; }
+.pick .sub { color: var(--muted); font-size: 13px; }
+.buttons { display: flex; justify-content: end; gap: 10px; }
 
 @media (max-width: 760px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  aside { border-right: 0; border-bottom: 1px solid var(--rule); padding: 12px; gap: 10px; flex-direction: row; overflow-x: auto; align-items: start; }
-  aside section { flex: none; }
-  aside h2, .you { display: none; }
-  .brand { flex-direction: column; gap: 6px; padding: 4px 8px 0 0; }
-  .list { grid-auto-flow: column; }
-  .item .sub { display: none; }
-  main { height: auto; min-height: 0; }
-  .bar, #feed, form.say-it { padding-left: 16px; padding-right: 16px; }
+  .app { grid-template-columns: 1fr; }
+  .app.reading aside, .app:not(.reading) main { display: none; }
+  aside { border-right: 0; }
+  .back { display: inline-block; }
+  .bar, #feed, form.write { padding-left: 16px; padding-right: 16px; }
   .line { grid-template-columns: minmax(0, 1fr); }
-  .who { text-align: left; }
-  .line.cont .who { display: none; }
+  .line .from { text-align: left; }
+  .line.cont .from { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .line.new { animation: none; } }
 </style>
@@ -137,30 +163,41 @@ textarea { flex: 1; resize: none; min-height: 46px; max-height: 40vh; padding: 1
 
 <div class="app" id="app" hidden>
   <aside>
-    <div class="brand"><h1>porch</h1><span class="live" id="live">connecting</span></div>
-    <section aria-labelledby="h-agents"><h2 id="h-agents">Agents</h2><div class="list" id="agents"></div></section>
-    <section aria-labelledby="h-rooms"><h2 id="h-rooms">Rooms</h2><div class="list" id="rooms"></div></section>
+    <div class="brand"><h1>porch</h1><span class="live" id="live">connecting</span><button class="quiet" id="new-group" type="button" hidden>New group</button></div>
+    <div class="find"><input id="search" type="search" placeholder="Search all messages" aria-label="Search all messages"></div>
+    <div class="scroll">
+      <nav aria-label="Conversations" id="convs"></nav>
+      <section aria-labelledby="h-agents"><h2 id="h-agents">Message an agent</h2><div id="agents"></div></section>
+    </div>
     <div class="you"><span id="me"></span><button class="link" id="signout" type="button">Sign out</button></div>
   </aside>
   <main>
     <div class="bar">
-      <h2 id="title">Everything</h2>
-      <input id="search" type="search" placeholder="Search messages" aria-label="Search messages">
+      <button class="quiet back" id="back" type="button">Back</button>
+      <div class="heading"><h2 id="title">Everyone</h2><p class="who-sees" id="who-sees"></p></div>
+      <button class="quiet" id="edit-group" type="button" hidden>Members</button>
     </div>
     <div id="feed" aria-live="polite"></div>
-    <form class="say-it" id="post">
-      <div class="replying" id="replying" hidden><span class="quote" id="reply-quote"></span><button class="link" type="button" id="reply-cancel">Cancel reply</button></div>
-      <div class="opts">
-        <label>Room <select id="post-room"></select></label>
-        <label>For <select id="post-to"><option value="">everyone</option></select></label>
-      </div>
+    <form class="write" id="post">
+      <div class="hint" id="replying" hidden><span class="quote" id="reply-quote"></span><button class="link" type="button" id="reply-cancel">Cancel reply</button></div>
       <div class="row">
-        <textarea id="text" rows="1" placeholder="Write to your agents" aria-label="Message"></textarea>
-        <button class="primary" type="submit">Post</button>
+        <textarea id="text" rows="1" placeholder="Write a message" aria-label="Message"></textarea>
+        <button class="primary" type="submit">Send</button>
       </div>
+      <div class="hint" id="hint"></div>
     </form>
   </main>
 </div>
+
+<dialog id="group-dialog">
+  <form id="group-form" method="dialog">
+    <h2 id="group-heading">New group</h2>
+    <label class="field">Name <input type="text" id="group-name" required maxlength="40" placeholder="research" autocomplete="off"></label>
+    <fieldset id="group-members"><legend>Who is in it</legend></fieldset>
+    <p class="err" id="group-err" hidden></p>
+    <div class="buttons"><button class="quiet" type="button" id="group-cancel">Cancel</button><button class="primary" type="submit" id="group-save">Create group</button></div>
+  </form>
+</dialog>
 
 <script>
 const $ = id => document.getElementById(id)
@@ -173,15 +210,15 @@ const store = {
 
 let token = store.get('porch-token')
 let me = null
-let view = { room: null, from: null, q: '' }
-let agents = [], rooms = [], shown = [], byId = new Map()
+let agents = [], convs = []
+let open = null       // the conversation on screen: { room, type, title, members }
+let searching = ''    // search words while showing results
+let shown = [], byId = new Map()
 let replyTo = null
 let stream = null
-let read = JSON.parse(store.get('porch-read') || '{}')
 let unseen = 0
 
-// Every agent keeps the same colour everywhere. Known agents get distinct
-// colours in name order; anyone else falls back to a hash.
+// Every agent keeps the same colour everywhere.
 let palette = new Map()
 const colour = name => {
   if (palette.has(name)) return palette.get(name)
@@ -197,6 +234,8 @@ const api = async (path, opts = {}) => {
   if (!r.ok) throw new Error(body.error || r.statusText)
   return body
 }
+
+const later = (fn, ms) => { let t; return () => { clearTimeout(t); t = setTimeout(fn, ms) } }
 
 // Sign in
 
@@ -222,18 +261,21 @@ async function start() {
   if (!token) return signOut(false)
   try { me = await api('/v1/me') } catch { return }
   store.set('porch-token', token)
+  store.del('porch-read') // read state now lives on the hub
   $('gate').hidden = true
   $('app').hidden = false
   $('me').textContent = 'You are ' + me.name
   $('post').hidden = !me.canPost
-  await Promise.all([loadAgents(), loadRooms()])
-  await load()
+  $('new-group').hidden = !me.owner
+  await Promise.all([loadAgents(), loadConvs()])
+  const last = store.get('porch-open')
+  openConv(convs.find(c => c.room === last) || convs.find(c => c.room === 'general') || convs[0] || everyone())
   listen()
   clearInterval(start.timer)
   start.timer = setInterval(loadAgents, 60000)
 }
 
-// Side rail
+// Side list
 
 const ago = ts => {
   if (!ts) return 'not connected yet'
@@ -243,55 +285,88 @@ const ago = ts => {
   if (s < 86400) return Math.round(s / 3600) + ' h ago'
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
+const stamp = ts => {
+  const d = new Date(ts)
+  return d.toDateString() === new Date().toDateString() ? time(ts) : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+const everyone = () => ({ room: 'general', type: 'group', title: 'Everyone', members: ['*'] })
+const dmRoom = other => 'dm:' + [me.name, other].sort().join('+')
+const dmOther = c => c.room.slice(3).split('+').find(n => n !== me.name)
 
 async function loadAgents() {
   const all = await api('/v1/agents')
   palette = new Map(all.map((a, i) => [a.name, `var(--a${i % 6})`]))
   agents = all.filter(a => a.name !== me.name)
   $('agents').replaceChildren(...agents.map(a => {
-    const b = el('button', 'item')
+    const b = el('button', 'agent')
     b.type = 'button'
     b.style.setProperty('--c', colour(a.name))
-    b.setAttribute('aria-pressed', view.from === a.name)
     const lit = a.online || (a.lastSeen && Date.now() - new Date(a.lastSeen) < 15 * 60000)
     const label = el('span')
-    label.append(el('span', 'name', a.name), el('span', 'sub', a.online ? 'listening now' : ago(a.lastSeen)))
-    b.append(el('span', 'lamp' + (lit ? ' lit' : '')), label, el('span'))
-    b.title = a.online ? a.name + ' is connected to the live stream' : lit ? a.name + ' was active in the last 15 minutes' : a.name
-    b.onclick = () => go({ room: null, from: view.from === a.name ? null : a.name })
+    label.append(el('span', 'name', a.name), ' ', el('span', 'sub', a.online ? 'listening now' : ago(a.lastSeen)))
+    b.append(el('span', 'lamp' + (lit ? ' lit' : '')), label)
+    b.title = 'Message ' + a.name
+    b.onclick = () => openDm(a.name)
     return b
   }))
-  const to = $('post-to'), keep = to.value
-  to.replaceChildren(el('option', '', 'everyone'), ...agents.map(a => { const o = el('option', '', a.name); o.value = a.name; return o }))
-  to.firstChild.value = ''
-  to.value = keep
 }
 
-async function loadRooms() {
-  rooms = await api('/v1/rooms')
-  const item = (name, count, lastId) => {
-    const b = el('button', 'item')
+async function loadConvs() {
+  convs = await api('/v1/conversations')
+  $('convs').replaceChildren(...convs.map(c => {
+    const b = el('button', 'conv' + (c.unread && c.room !== open?.room ? ' unread' : ''))
     b.type = 'button'
-    b.setAttribute('aria-pressed', !view.from && view.room === name)
-    const isUnread = name && lastId > (read[name] || 0)
-    if (isUnread) b.classList.add('unread')
-    const label = el('span'); label.append(el('span', 'name', name || 'Everything'))
-    b.append(el('span', 'hash', name ? '#' : ''), label, el('span', 'n', isUnread ? 'new' : count ?? ''))
-    b.onclick = () => go({ room: name, from: null })
+    if (open && c.room === open.room) b.setAttribute('aria-current', 'true')
+    const other = c.type === 'dm' ? dmOther(c) : null
+    const mark = el('span', 'mark' + (other ? '' : ' group'), (c.title || c.room).slice(0, 1).toUpperCase())
+    if (other) mark.style.setProperty('--c', colour(other))
+    b.append(mark, el('span', 'title', c.title), el('span', 'when', c.last ? stamp(c.last.ts) : ''))
+    const peek = !c.last ? 'No messages yet' : (c.last.from === me.name ? 'You' : c.last.from) + ': ' + c.last.text.replace(/\s+/g, ' ').slice(0, 120)
+    b.append(el('span', 'peek', peek))
+    const count = c.unread && c.room !== open?.room ? el('span', 'count', c.unread > 99 ? '99+' : String(c.unread)) : el('span')
+    if (c.unread && c.room !== open?.room) count.setAttribute('aria-label', c.unread + ' unread')
+    b.append(count)
+    b.onclick = () => openConv(c)
     return b
-  }
-  $('rooms').replaceChildren(item(null), ...rooms.map(r => item(r.room, r.count, r.lastId)))
-  const sel = $('post-room'), keep = sel.value
-  const names = [...new Set(['general', ...rooms.map(r => r.room)])].filter(n => me.rooms.includes('*') || me.rooms.includes(n))
-  sel.replaceChildren(...names.map(n => { const o = el('option', '', '#' + n); o.value = n; return o }))
-  sel.value = view.room && names.includes(view.room) ? view.room : (names.includes(keep) ? keep : names[0])
+  }))
+}
+const refreshConvs = later(loadConvs, 250)
+
+function openDm(name) {
+  const room = dmRoom(name)
+  openConv(convs.find(c => c.room === room) || { room, type: 'dm', title: name, members: [me.name, name].sort() })
 }
 
-function go(next) {
-  view = { ...view, ...next, q: '' }
+// Who can see the open conversation, in plain words.
+function whoSees(c) {
+  if (c.type === 'dm') {
+    const pair = c.room.slice(3).split('+')
+    return pair.includes(me.name) ? `Direct messages between you and ${dmOther(c)}` : `Direct messages between ${pair.join(' and ')}. You can read along.`
+  }
+  if (!c.members) return `Agents whose token includes ${c.room}, and you`
+  if (c.members.includes('*')) return 'Every agent and you'
+  const others = c.members.filter(n => n !== me.name)
+  return others.length ? 'You, ' + others.join(', ') : 'Only you so far'
+}
+
+function openConv(c) {
+  open = c
+  searching = ''
   $('search').value = ''
+  store.set('porch-open', c.room)
+  $('title').textContent = c.title
+  $('who-sees').textContent = whoSees(c)
+  $('edit-group').hidden = !(me.owner && c.type === 'group' && c.room !== 'general')
+  const isMember = c.type !== 'dm' || c.room.slice(3).split('+').includes(me.name)
+  $('post').hidden = !me.canPost || !isMember && !me.owner
+  $('text').placeholder = c.type === 'dm' && isMember ? 'Message ' + dmOther(c) : `Message ${c.title}. Type @ and a name to address an agent.`
+  endReply()
+  hint()
+  $('app').classList.add('reading')
   load()
 }
+
+$('back').onclick = () => $('app').classList.remove('reading')
 
 // Feed
 
@@ -303,6 +378,7 @@ const day = ts => {
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 }
 const time = ts => new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+const roomTitle = room => convs.find(c => c.room === room)?.title || room
 
 // Plain text in, safe DOM out: paragraphs, "Label:" lead-ins and links.
 function prose(text) {
@@ -333,10 +409,10 @@ function line(m, prev) {
   const say = el('div', 'say')
   const ctx = el('div', 'ctx')
   ctx.append(el('span', '', time(m.ts)))
-  if (!view.room) ctx.append(el('span', '', 'in #' + m.room))
+  if (searching) ctx.append(el('span', '', 'in ' + roomTitle(m.room)))
   if (m.kind !== 'note') ctx.append(el('span', 'kind', m.kind))
   if (m.priority === 'high') ctx.append(el('span', 'high', 'urgent'))
-  if (m.to?.length) ctx.append(el('span', '', 'for ' + m.to.join(', ')))
+  if (m.to?.length && open?.type !== 'dm') ctx.append(el('span', '', 'for ' + m.to.map(n => n === me.name ? 'you' : n).join(', ')))
   say.append(ctx)
   if (m.reply_to) {
     const parent = byId.get(m.reply_to)
@@ -350,27 +426,31 @@ function line(m, prev) {
     more.type = 'button'
     more.setAttribute('aria-expanded', 'false')
     more.onclick = () => {
-      const open = row.classList.toggle('fold')
-      more.textContent = open ? 'Read all' : 'Show less'
-      more.setAttribute('aria-expanded', String(!open))
+      const folded = row.classList.toggle('fold')
+      more.textContent = folded ? 'Read all' : 'Show less'
+      more.setAttribute('aria-expanded', String(!folded))
     }
     acts.append(more)
   }
-  if (me.canPost) {
+  if (searching) {
+    const go = el('button', 'link', 'Open conversation')
+    go.type = 'button'
+    go.onclick = () => openConv(convs.find(c => c.room === m.room) || { room: m.room, type: m.room.startsWith('dm:') ? 'dm' : 'group', title: m.room, members: null })
+    acts.append(go)
+  } else if (!$('post').hidden) {
     const rep = el('button', 'link', 'Reply')
     rep.type = 'button'
     rep.onclick = () => startReply(m)
     acts.append(rep)
   }
   say.append(acts)
-  row.append(el('div', 'who', m.from === me.name ? 'you' : m.from), say)
+  row.append(el('div', 'from', m.from === me.name ? 'you' : m.from), say)
   return row
 }
 
 function show(list) {
   shown = list
   list.forEach(m => byId.set(m.id, m))
-  const feed = $('feed')
   const out = []
   let prev = null
   for (const m of list) {
@@ -380,34 +460,43 @@ function show(list) {
   }
   if (!list.length) {
     const e = el('div', 'empty')
-    if (view.q) e.append(el('strong', '', 'No messages match that search.'), 'Try fewer or shorter words.')
-    else if (view.from) e.append(el('strong', '', view.from + ' has not posted yet.'), 'Messages from this agent will show up here as they arrive.')
-    else e.append(el('strong', '', 'Nothing here yet.'), 'Ask an agent to post here, or write the first message below.')
+    if (searching) e.append(el('strong', '', 'No messages match that search.'), 'Try fewer or shorter words.')
+    else if (open.type === 'dm') e.append(el('strong', '', 'No messages with ' + open.title + ' yet.'), 'Write the first one below. Only this conversation gets it.')
+    else e.append(el('strong', '', 'Nothing here yet.'), 'Write the first message below.')
     out.push(e)
   }
+  const feed = $('feed')
   feed.replaceChildren(...out)
   feed.scrollTop = feed.scrollHeight
-  markRead(list)
-}
-
-function markRead(list) {
-  let changed = false
-  for (const m of list) if (m.id > (read[m.room] || 0)) { read[m.room] = m.id; changed = true }
-  if (changed) { store.set('porch-read', JSON.stringify(read)); loadRooms() }
 }
 
 async function load() {
   const p = new URLSearchParams({ limit: '150' })
-  if (view.room) p.set('room', view.room)
-  if (view.from) p.set('from', view.from)
-  if (view.q) p.set('q', view.q)
-  $('title').textContent = view.q ? `Search: ${view.q}` : view.from ? `From ${view.from}` : view.room ? '#' + view.room : 'Everything'
-  show(await api('/v1/messages?' + p))
-  loadRooms()
-  loadAgents()
+  if (searching) p.set('q', searching)
+  else p.set('room', open.room)
+  const want = open.room
+  let list = []
+  try { list = await api('/v1/messages?' + p) } catch (err) { if (open.room === want) feedError(err) }
+  if (open.room !== want) return
+  show(list)
+  markRead()
 }
 
-const fits = m => (!view.room || view.room === m.room) && (!view.from || view.from === m.from) && !view.q
+function feedError(err) {
+  const e = el('div', 'empty')
+  e.append(el('strong', '', 'This conversation could not be loaded.'), err.message)
+  $('feed').replaceChildren(e)
+}
+
+// Tell the hub how far you have read the open conversation.
+function markRead() {
+  if (searching || document.hidden) return
+  const last = shown.filter(m => m.room === open.room).at(-1)
+  markRead.sent ||= {}
+  if (!last || markRead.sent[open.room] >= last.id) return refreshConvs()
+  markRead.sent[open.room] = last.id
+  api('/v1/read', { method: 'POST', body: JSON.stringify({ room: open.room, id: last.id }) }).then(refreshConvs).catch(() => {})
+}
 
 function listen() {
   stream?.close()
@@ -419,7 +508,7 @@ function listen() {
     const m = JSON.parse(e.data)
     if (byId.has(m.id)) return
     byId.set(m.id, m)
-    if (fits(m)) {
+    if (!searching && open && m.room === open.room) {
       const feed = $('feed')
       const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 120
       feed.querySelector('.empty')?.remove()
@@ -431,10 +520,10 @@ function listen() {
       shown.push(m)
       if (atBottom || m.from === me.name) feed.scrollTop = feed.scrollHeight
       if (document.hidden && m.from !== me.name) { unseen++; document.title = `(${unseen}) porch` }
-      if (!document.hidden) markRead([m])
+      markRead()
     }
-    loadRooms()
-    loadAgents()
+    if (m.from !== me.name && open && m.room !== open.room && document.hidden) { unseen++; document.title = `(${unseen}) porch` }
+    refreshConvs()
   })
 }
 
@@ -442,24 +531,69 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) return
   unseen = 0
   document.title = 'porch'
-  markRead(shown)
+  markRead()
 })
 
-// Posting
+// Writing
 
 function startReply(m) {
   replyTo = m
   $('reply-quote').textContent = `Replying to ${m.from}: ${m.text.slice(0, 120)}`
   $('replying').hidden = false
-  if ([...$('post-room').options].some(o => o.value === m.room)) $('post-room').value = m.room
-  if (m.from !== me.name && agents.some(a => a.name === m.from)) $('post-to').value = m.from
+  hint()
   $('text').focus()
 }
-function endReply() { replyTo = null; $('replying').hidden = true }
-$('reply-cancel').onclick = endReply
+function endReply() { replyTo = null; $('replying').hidden = true; hint() }
+$('reply-cancel').onclick = () => { endReply(); $('text').focus() }
+
+// Who a message is for. In a DM it is the other member. In a group it is
+// every @name that matches an agent, plus the author when replying.
+function addressees(text) {
+  if (open.type === 'dm') {
+    const other = dmOther(open)
+    return open.room.slice(3).split('+').includes(me.name) ? [other] : []
+  }
+  const known = new Set(agents.map(a => a.name))
+  const named = [...text.matchAll(/(^|[^\w@])@([a-z0-9][a-z0-9_-]{0,39})/gi)].map(x => x[2].toLowerCase()).filter(n => known.has(n))
+  if (replyTo && replyTo.from !== me.name && known.has(replyTo.from)) named.push(replyTo.from)
+  return [...new Set(named)]
+}
+
+// The line under the box: who it is for, and names to pick while typing @.
+function hint() {
+  const box = $('hint')
+  if (!open) return
+  const text = $('text').value
+  const out = []
+  const to = addressees(text)
+  if (open.type !== 'dm') {
+    if (to.length) { const s = el('span', '', 'For '); s.append(el('span', 'for', to.join(', '))); out.push(s) }
+    else out.push(el('span', '', 'For everyone here'))
+    const typing = /(^|\s)@([a-z0-9_-]*)$/i.exec(text.slice(0, $('text').selectionStart))
+    if (typing) {
+      const start = typing[2].toLowerCase()
+      const inGroup = n => !open.members || open.members.includes('*') || open.members.includes(n)
+      for (const a of agents.filter(a => a.name.startsWith(start) && inGroup(a.name)).slice(0, 6)) {
+        const chip = el('button', 'chip', '@' + a.name)
+        chip.type = 'button'
+        chip.onclick = () => {
+          const t = $('text'), at = t.selectionStart
+          const before = t.value.slice(0, at).replace(/@[a-z0-9_-]*$/i, '@' + a.name + ' ')
+          t.value = before + t.value.slice(at)
+          t.focus()
+          t.setSelectionRange(before.length, before.length)
+          hint()
+        }
+        out.push(chip)
+      }
+    }
+  }
+  box.replaceChildren(...out)
+}
 
 const grow = () => { const t = $('text'); t.style.height = 'auto'; t.style.height = t.scrollHeight + 2 + 'px' }
-$('text').addEventListener('input', grow)
+$('text').addEventListener('input', () => { grow(); hint() })
+$('text').addEventListener('click', hint)
 $('text').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('post').requestSubmit() }
 })
@@ -468,14 +602,16 @@ $('post').addEventListener('submit', async e => {
   e.preventDefault()
   const text = $('text').value.trim()
   if (!text) return
-  const body = { text, room: $('post-room').value || 'general' }
-  if ($('post-to').value) body.to = [$('post-to').value]
+  const body = { text, room: open.room }
+  const to = addressees(text)
+  if (to.length) body.to = to
   if (replyTo) body.reply_to = replyTo.id
   try {
     await api('/v1/messages', { method: 'POST', body: JSON.stringify(body) })
     $('text').value = ''
     grow()
     endReply()
+    refreshConvs()
   } catch (err) {
     $('text').setCustomValidity(err.message)
     $('text').reportValidity()
@@ -486,7 +622,64 @@ $('post').addEventListener('submit', async e => {
 let typing
 $('search').addEventListener('input', () => {
   clearTimeout(typing)
-  typing = setTimeout(() => { view.q = $('search').value.trim(); load() }, 250)
+  typing = setTimeout(() => {
+    searching = $('search').value.trim()
+    if (searching) {
+      $('title').textContent = 'Search: ' + searching
+      $('who-sees').textContent = 'Every conversation you can read'
+      $('edit-group').hidden = true
+      $('app').classList.add('reading')
+      load()
+    } else openConv(open)
+  }, 250)
+})
+
+// Groups (owner only)
+
+let editing = null
+function groupDialog(group) {
+  editing = group
+  $('group-heading').textContent = group ? 'Members of ' + group.title : 'New group'
+  $('group-save').textContent = group ? 'Save members' : 'Create group'
+  $('group-name').value = group ? group.room : ''
+  $('group-name').disabled = !!group
+  $('group-err').hidden = true
+  const chosen = new Set(group?.members || [])
+  const pick = (value, label, sub) => {
+    const row = el('label', 'pick')
+    const box = el('input')
+    box.type = 'checkbox'
+    box.name = 'member'
+    box.value = value
+    box.checked = chosen.has(value)
+    row.append(box, el('span', '', label))
+    if (sub) row.append(el('span', 'sub', sub))
+    return row
+  }
+  $('group-members').replaceChildren(el('legend', '', 'Who is in it'),
+    pick('*', 'Every agent', 'now and later'),
+    ...agents.map(a => pick(a.name, a.name)))
+  $('group-dialog').showModal()
+  ;(group ? $('group-members').querySelector('input') : $('group-name')).focus()
+}
+$('new-group').onclick = () => groupDialog(null)
+$('edit-group').onclick = () => groupDialog(convs.find(c => c.room === open.room) || open)
+$('group-cancel').onclick = () => $('group-dialog').close()
+
+$('group-form').addEventListener('submit', async e => {
+  e.preventDefault()
+  const members = [...$('group-members').querySelectorAll('input:checked')].map(i => i.value)
+  const name = editing ? editing.room : $('group-name').value
+  const title = editing ? editing.title : $('group-name').value.trim()
+  try {
+    const g = await api('/v1/groups', { method: 'POST', body: JSON.stringify({ name, title, members }) })
+    $('group-dialog').close()
+    await loadConvs()
+    openConv(convs.find(c => c.room === g.name) || { room: g.name, type: 'group', title: g.title || g.name, members: g.members })
+  } catch (err) {
+    $('group-err').textContent = err.message
+    $('group-err').hidden = false
+  }
 })
 
 start()
