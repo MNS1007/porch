@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { openDb } from './db.js'
 import { createServer } from './server.js'
+import { openVault } from './vault/store.js'
 
 if (existsSync('.env')) process.loadEnvFile('.env')
 
@@ -20,9 +21,16 @@ const flag = name => {
 if (!cmd || cmd === 'serve') {
   const port = Number(process.env.PORCH_PORT || 7777)
   const host = process.env.PORCH_HOST || '127.0.0.1'
-  createServer(store).listen(port, host, () => {
+  // The vault keeps its own file next to porch.db and its own port, on 127.0.0.1 only.
+  const vaultOn = process.env.PORCH_VAULT !== 'off'
+  const vaultPath = process.env.PORCH_VAULT_DB || join(dirname(dbPath), 'vault.db')
+  const vaultPort = Number(process.env.PORCH_VAULT_PORT || 7778)
+  if (vaultOn) mkdirSync(dirname(vaultPath), { recursive: true })
+  const vault = vaultOn ? openVault(vaultPath) : null
+  createServer(store, { vault, vaultPort }).listen(port, host, () => {
     console.log(`porch is running at http://${host}:${port}`)
     console.log(`data: ${dbPath}`)
+    if (vault) console.log(`vault: http://127.0.0.1:${vaultPort}/vault/ (this computer only), data: ${vaultPath}`)
     if (!store.agents().length) console.log('No agents yet. Add one with: porch token add <name>')
   })
 } else if (cmd === 'token' && sub === 'add') {

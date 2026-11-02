@@ -4,6 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
 import { KINDS, PRIORITIES, dmName, families } from './db.js'
+import { registerVaultTools } from './vault/mcp-tools.js'
 
 const text = obj => ({ content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj, null, 1) }] })
 
@@ -106,6 +107,9 @@ function build(agent, api) {
     const agents = api.agents()
     return text({ agents, families: families(agents.map(a => a.name)) })
   })
+
+  // vault_list, vault_request, vault_status, when the hub runs a vault.
+  if (api.vault) registerVaultTools(server, agent, api.vault)
 
   return server
 }

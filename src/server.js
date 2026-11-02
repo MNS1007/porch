@@ -4,11 +4,21 @@ import { fileURLToPath } from 'node:url'
 import { roomName, dmName } from './db.js'
 import { handleMcp } from './mcp.js'
 import { rateLimiter, badTokenGuard, clientIp } from './limits.js'
+import { vaultServer } from './vault/routes.js'
+import { vaultAgentApi } from './vault/agent-api.js'
+import { handleVaultHttp } from './vault/http.js'
 
 const PAGE = readFileSync(fileURLToPath(new URL('../public/index.html', import.meta.url)))
 const CONNECTOR_DOC = readFileSync(fileURLToPath(new URL('../public/connector.md', import.meta.url)), 'utf8')
 
-export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_LIMIT || 120), log = true } = {}) {
+// `vault` is an open vault from vault/store.js. With it, porch also runs the
+// vault's own server (page, approvals, proxy) on 127.0.0.1:vaultPort, and agents
+// get the /v1/vault routes and the vault MCP tools here. `vaultProxy` takes
+// {fetchFn, upstream} for tests.
+export function createServer(store, {
+  perMinute = Number(process.env.PORCH_RATE_LIMIT || 120), log = true,
+  vault = null, vaultPort = Number(process.env.PORCH_VAULT_PORT || 7778), vaultProxy = {},
+} = {}) {
   const allow = rateLimiter(perMinute)
   const guard = badTokenGuard()
   const streams = new Set() // { agent, rooms, res }
@@ -144,6 +154,7 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
       if (log) console.log(`[${new Date().toISOString()}] ${agent.name} ${req.method} ${url.pathname}`)
 
       if (url.pathname === '/mcp') return handleMcp(req, res, agent, api, await readBody(req))
+      if (api.vault && url.pathname.startsWith('/v1/vault') && await handleVaultHttp(req, res, agent, api.vault)) return
 
       if (url.pathname === '/v1/messages' && req.method === 'POST') {
         return json(res, 201, api.post(agent, parseJson(await readBody(req))))
@@ -209,7 +220,55 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
       json(res, err.status || 400, { error: err.message, ...err.current })
     }
   })
+  if (vault) mountVault(server)
   return server
+
+  // The vault server starts and stops with this one. Agents reach the vault
+  // only through api.vault, which can ask but never approve.
+  function mountVault(server) {
+    const vaultSrv = vaultServer({ vault: handing(vault), notify: vaultNote, port: vaultPort, ...vaultProxy })
+    api.vault = vaultAgentApi(vault, { notify: vaultNote, store, port: () => vaultSrv.address()?.port ?? vaultPort })
+    server.vault = vaultSrv
+    vaultSrv.on('error', err => server.emit('error', err))
+    server.on('listening', () => { if (!vaultSrv.listening) vaultSrv.listen(vaultPort) })
+    const close = server.close.bind(server)
+    server.close = cb => {
+      if (vaultSrv.listening) { vaultSrv.close(); vaultSrv.closeAllConnections() }
+      return close(cb)
+    }
+  }
+
+  // The vault page gets this copy of the vault. decide() returns the handle
+  // once; it goes straight to the agent api's memory, in the same tick, and
+  // the page only ever sees the grant.
+  function handing(v) {
+    return {
+      ...v,
+      decide(id, decision, actor) {
+        const out = v.decide(id, decision, actor)
+        if (out?.handle) api.vault.hold(id, out.handle)
+        return out
+      },
+    }
+  }
+
+  // Vault notes for the owner: a request waiting on the page, or a grant paused
+  // at 80% of a cap. They go to a "vault" room only the owner is a member of,
+  // from the reserved sender "vault", so they never look like the owner's own
+  // words (which Anton would take as a task). Names and numbers only.
+  function vaultNote(note) {
+    const text = String(note?.text || '').trim()
+    if (!text) return
+    if (!store.meta.has('vault')) store.saveRoom({ name: 'vault', type: 'group', title: 'Vault', members: [store.owner], by: 'vault' })
+    const paused = note.type === 'vault.paused' || note.type === 'vault.lockout'
+    const data = {}
+    for (const k of ['request_id', 'grant_id', 'agent', 'secret', 'cap']) if (note[k] != null) data[k] = note[k]
+    publish(store.post('vault', {
+      room: 'vault', text, to: [store.owner],
+      kind: paused ? 'alert' : 'question', priority: paused ? 'high' : 'normal',
+      data: { vault: data },
+    }))
+  }
 }
 
 function tokenFrom(req, url) {

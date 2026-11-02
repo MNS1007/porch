@@ -13,6 +13,8 @@ const MAX_TEXT = 8000
 const NAME = /^[a-z0-9][a-z0-9_-]{0,39}$/
 const PART = '[a-z0-9][a-z0-9_-]{0,39}'
 const AGENT = new RegExp(`^${PART}(?:/${PART})?$`)
+// Names the hub posts as itself, so no token can pose as them.
+export const RESERVED = new Set(['vault'])
 const DM = new RegExp(`^dm:(${PART}(?:/${PART})?)\\+(${PART}(?:/${PART})?)$`)
 
 const hash = token => createHash('sha256').update(token).digest('hex')
@@ -125,6 +127,7 @@ class Store {
   addMember(manager, name) {
     name = String(name || '').trim().toLowerCase()
     if (!AGENT.test(name)) throw withStatus(400, 'Agent names use lowercase letters, digits, - and _, with at most one / for a family.')
+    if (RESERVED.has(name)) throw withStatus(400, `"${name}" is kept for the hub itself.`)
     if (!actsFor(manager, name)) throw withStatus(403, `This token cannot act for "${name}".`)
     const cur = this.db.prepare('SELECT managed_by FROM agents WHERE name = ?').get(name)
     if (cur && cur.managed_by === manager.name) return this.agent(name)
@@ -175,6 +178,7 @@ class Store {
 
   addAgent(name, { rooms = ['*'], canPost = true } = {}) {
     if (!AGENT.test(name)) throw new Error('Agent names use lowercase letters, digits, - and _, up to 40 characters, with at most one / for a family (claude-code/renfort).')
+    if (RESERVED.has(name)) throw new Error(`"${name}" is kept for the hub itself.`)
     const managed = this.db.prepare('SELECT managed_by FROM agents WHERE name = ? AND managed_by IS NOT NULL').get(name)
     if (managed) throw new Error(`"${name}" is spoken for by ${managed.managed_by}. Remove it there first.`)
     const token = 'porch_' + randomBytes(24).toString('base64url')
@@ -217,6 +221,7 @@ class Store {
     if (!this.hasAgent(from)) throw new Error(`No agent named "${from}".`)
     if (from === this.owner) throw new Error('That is the owner. Set PORCH_OWNER instead of renaming it.')
     if (!AGENT.test(to)) throw new Error('Agent names use lowercase letters, digits, - and _, up to 40 characters, with at most one / for a family.')
+    if (RESERVED.has(to)) throw new Error(`"${to}" is kept for the hub itself.`)
     if (this.hasAgent(to)) throw new Error(`"${to}" already exists.`)
     const db = this.db
     const swap = list => [...new Set(list.map(n => n === from ? to : n))]
@@ -298,6 +303,8 @@ class Store {
 
   // Only the two members, and the owner, write in a DM.
   canPost(agent, name) {
+    // The vault room is written only by the hub's own reserved sender (server.js vaultNote).
+    if (RESERVED.has(name)) return false
     if (name.startsWith('dm:')) return agent.owner || name.slice(3).split('+').includes(agent.name)
     return this.canRead(agent, name)
   }
