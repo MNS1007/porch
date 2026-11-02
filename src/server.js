@@ -1,7 +1,7 @@
 import http from 'node:http'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { canRead } from './db.js'
+import { roomName, dmName } from './db.js'
 import { handleMcp } from './mcp.js'
 import { rateLimiter, badTokenGuard, clientIp } from './limits.js'
 
@@ -15,7 +15,7 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
 
   function publish(msg) {
     for (const s of streams) {
-      if (!canRead(s.agent, msg.room)) continue
+      if (!store.canRead(s.agent, msg.room)) continue
       if (s.rooms && !s.rooms.includes(msg.room)) continue
       s.res.write(`id: ${msg.id}\nevent: message\ndata: ${JSON.stringify(msg)}\n\n`)
     }
@@ -25,18 +25,49 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
   const api = {
     post(agent, msg) {
       if (!agent.canPost) throw httpError(403, 'This token can read but not post.')
-      const room = String(msg.room || 'general').toLowerCase()
-      if (!canRead(agent, room)) throw httpError(403, `This token cannot use room "${room}".`)
-      const saved = store.post(agent.name, { ...msg, room })
+      // "dm": "<agent>" is the short way to write to one agent in private.
+      if (msg.dm) msg = { ...msg, room: dmName(agent.name, String(msg.dm).trim().toLowerCase()) }
+      const room = roomName(msg.room)
+      if (!store.canPost(agent, room)) throw httpError(403, `This token cannot use room "${room}".`)
+      let to = msg.to
+      if (room.startsWith('dm:')) {
+        const pair = room.slice(3).split('+')
+        store.openDm(pair[0], pair[1])
+        // In a DM the other member is who the message is for.
+        if (!to?.length && pair.includes(agent.name)) to = pair.filter(n => n !== agent.name)
+      }
+      const saved = store.post(agent.name, { ...msg, room, to })
       publish(saved)
       return saved
     },
     list(agent, query) {
-      if (query.room && !canRead(agent, query.room)) throw httpError(403, `This token cannot read room "${query.room}".`)
-      return store.list({ ...query, rooms: agent.rooms.includes('*') ? null : agent.rooms })
+      if (query.room) query = { ...query, room: roomName(query.room) }
+      if (query.room && !store.canRead(agent, query.room)) throw httpError(403, `This token cannot read room "${query.room}".`)
+      return store.list({ ...query, rooms: store.readable(agent) })
     },
     rooms(agent) {
-      return store.rooms().filter(r => canRead(agent, r.room))
+      return store.rooms().filter(r => store.canRead(agent, r.room))
+    },
+    conversations(agent) {
+      return store.conversations(agent)
+    },
+    // The DM room name for the caller and another agent. Nothing is saved until the first message.
+    dm(agent, other) {
+      other = String(other || '').trim().toLowerCase()
+      if (other === agent.name) throw httpError(400, 'A DM needs another agent.')
+      if (!store.hasAgent(other)) throw httpError(404, `No agent named ${other}.`)
+      const room = dmName(agent.name, other)
+      return { room, type: 'dm', title: other, members: room.slice(3).split('+') }
+    },
+    saveGroup(agent, body) {
+      if (!agent.owner || !agent.canPost) throw httpError(403, 'Only the owner can make groups.')
+      return store.saveGroup(body, agent.name)
+    },
+    markRead(agent, body) {
+      const room = roomName(body.room)
+      if (!store.canRead(agent, room)) throw httpError(403, `This token cannot read room "${room}".`)
+      store.markRead(agent.name, room, body.id)
+      return { ok: true }
     },
     agents() {
       // An agent holding the live stream open counts as online even if it sends nothing.
@@ -82,6 +113,10 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
       }
       if (url.pathname === '/v1/rooms' && req.method === 'GET') return json(res, 200, api.rooms(agent))
       if (url.pathname === '/v1/agents' && req.method === 'GET') return json(res, 200, api.agents())
+      if (url.pathname === '/v1/conversations' && req.method === 'GET') return json(res, 200, api.conversations(agent))
+      if (url.pathname === '/v1/groups' && req.method === 'POST') return json(res, 201, api.saveGroup(agent, parseJson(await readBody(req))))
+      if (url.pathname === '/v1/read' && req.method === 'POST') return json(res, 200, api.markRead(agent, parseJson(await readBody(req))))
+      if (url.pathname.startsWith('/v1/dm/') && req.method === 'GET') return json(res, 200, api.dm(agent, decodeURIComponent(url.pathname.slice(7))))
       if (url.pathname === '/v1/me' && req.method === 'GET') return json(res, 200, agent)
 
       // Forgiving drop box for apps that can only send a webhook: any text or JSON becomes a message.
@@ -98,7 +133,7 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
       }
 
       if (url.pathname === '/v1/stream' && req.method === 'GET') {
-        const rooms = url.searchParams.get('rooms')?.split(',').map(s => s.trim()).filter(Boolean) || null
+        const rooms = url.searchParams.get('rooms')?.split(',').map(s => s.trim()).filter(Boolean).map(roomName) || null
         const after = Number(req.headers['last-event-id'] || url.searchParams.get('after') || 0)
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' })
         res.write('retry: 3000\n\n')
