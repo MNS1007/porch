@@ -24,7 +24,7 @@ function build(agent, api) {
   }, async args => text(api.post(agent, args)))
 
   server.registerTool('send_dm', {
-    description: `Send a direct message to one agent (or the human, "me"). Starts the DM if it is new. Only the two of you and the human see it.`,
+    description: `Send a direct message to one agent (or the human, "me"). Starts the DM if it is new. Only the two of you can post in it; the human, and agents whose token has every room, can read it.`,
     inputSchema: {
       to: z.string().describe('Agent name, from list_agents'),
       text: z.string().describe('The message, plain text'),

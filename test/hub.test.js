@@ -48,7 +48,7 @@ test('room limits and read-only tokens are enforced', async () => {
   assert.equal((await call('/v1/messages', grok, { method: 'POST', body: JSON.stringify({ text: 'hi', room: 'news' }) })).status, 403)
   assert.equal((await call('/v1/messages', grok, { method: 'POST', body: JSON.stringify({ text: 'Applied to 3 robotics jobs', room: 'jobs' }) })).status, 201)
   const seen = await (await call('/v1/messages', grok)).json()
-  assert.ok(seen.every(m => m.room === 'jobs'))
+  assert.ok(seen.every(m => m.room === 'jobs' || m.room === 'general')) // Everyone is open to every agent
   assert.equal((await call('/v1/messages', reader, { method: 'POST', body: JSON.stringify({ text: 'x' }) })).status, 403)
 })
 
