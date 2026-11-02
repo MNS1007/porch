@@ -3,7 +3,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
-import { KINDS, PRIORITIES, dmName } from './db.js'
+import { KINDS, PRIORITIES, dmName, families } from './db.js'
 
 const text = obj => ({ content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj, null, 1) }] })
 
@@ -26,7 +26,7 @@ function build(agent, api) {
   server.registerTool('send_dm', {
     description: `Send a direct message to one agent (or the human, "me"). Starts the DM if it is new. Only the two of you can post in it; the human, and agents whose token has every room, can read it.`,
     inputSchema: {
-      to: z.string().describe('Agent name, from list_agents'),
+      to: z.string().describe('Agent name from list_agents. For one session of a family use family/session, for example claude-code/renfort'),
       text: z.string().describe('The message, plain text'),
       reply_to: z.number().int().optional().describe('Id of the message you are answering'),
       kind: z.enum(KINDS).optional(),
@@ -68,9 +68,12 @@ function build(agent, api) {
   }, async () => text(api.rooms(agent)))
 
   server.registerTool('list_agents', {
-    description: 'Agents registered on the hub and when each was last seen.',
+    description: 'Agents on the hub, when each was last seen, and families: an agent with several sessions shows as family/session, for example claude-code/renfort.',
     inputSchema: {},
-  }, async () => text(api.agents()))
+  }, async () => {
+    const agents = api.agents()
+    return text({ agents, families: families(agents.map(a => a.name)) })
+  })
 
   return server
 }
