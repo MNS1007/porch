@@ -67,6 +67,10 @@ export function openDb(path, { owner = process.env.PORCH_OWNER || 'me' } = {}) {
     );
   `)
   db.exec(DOCS_SCHEMA)
+  // Archived groups are hidden from the list but keep their messages.
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('rooms') WHERE name = 'archived'").get()) {
+    db.exec('ALTER TABLE rooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
+  }
   const store = new Store(db, owner)
   // First start after the upgrade: everything already posted counts as read.
   if (!hadReads) for (const a of store.agents()) store.seedReads(a.name)
@@ -89,8 +93,21 @@ class Store {
 
   loadRooms() {
     this.meta = new Map(this.db.prepare('SELECT * FROM rooms').all().map(r => [r.name, {
-      name: r.name, type: r.type, title: r.title, members: r.members ? JSON.parse(r.members) : null,
+      name: r.name, type: r.type, title: r.title, members: r.members ? JSON.parse(r.members) : null, archived: !!r.archived,
     }]))
+  }
+
+  // Hide a group from the list, or bring it back. An open room with no row gets one.
+  setArchived(name, archived) {
+    name = roomName(name)
+    if (name === EVERYONE) throw new Error('Everyone cannot be archived.')
+    if (name.startsWith('dm:')) throw new Error('Only groups can be archived.')
+    const known = this.meta.has(name) || this.db.prepare('SELECT 1 FROM messages WHERE room = ? LIMIT 1').get(name)
+    if (!known) throw new Error(`No group named "${name}".`)
+    this.db.prepare(`INSERT INTO rooms (name, type, archived, created) VALUES (?, 'group', ?, ?)
+      ON CONFLICT(name) DO UPDATE SET archived = excluded.archived`).run(name, archived ? 1 : 0, new Date().toISOString())
+    this.loadRooms()
+    return this.room(name)
   }
 
   // Agents and tokens
@@ -256,7 +273,9 @@ class Store {
   // message and how many messages from others the reader has not seen.
   // The owner gets every one. Agents get open groups they can read, and the
   // groups and DMs they belong to.
-  conversations(agent) {
+  // Archived groups are left out unless asked for; then they carry archived: true.
+  conversations(agent, { archived = false } = {}) {
+    const agentNames = new Set(this.agents().map(a => a.name))
     const last = new Map(this.db.prepare('SELECT m.* FROM messages m JOIN (SELECT MAX(id) AS id FROM messages GROUP BY room) x ON x.id = m.id').all()
       .map(r => [r.room, toMessage(r)]))
     const unread = new Map(this.db.prepare(`SELECT m.room, COUNT(*) AS n FROM messages m LEFT JOIN reads r ON r.agent = ? AND r.room = m.room
@@ -267,10 +286,15 @@ class Store {
       if (!this.canRead(agent, name)) continue
       const r = this.room(name)
       if (!agent.owner && r.members && !isMember(r, agent.name)) continue
+      if (r.archived && !archived) continue
+      let title = r.title || (r.type === 'dm' ? dmTitle(name, agent.name) : name)
+      // A group named like an agent reads "#anton", so it is not taken for the DM.
+      if (r.type === 'group' && agentNames.has(title.toLowerCase())) title = '#' + title
       out.push({
         room: name,
         type: r.type,
-        title: r.title || (r.type === 'dm' ? dmTitle(name, agent.name) : name),
+        title,
+        archived: !!r.archived,
         members: r.members,
         // For a DM you are in: the other agent and its family.
         with: r.type === 'dm' && name.slice(3).split('+').includes(agent.name) ? withWhom(name, agent.name) : null,
@@ -286,6 +310,8 @@ class Store {
 
   post(sender, msg) {
     const room = roomName(msg.room)
+    // Posting into an archived group brings it back, so nothing goes unseen.
+    if (this.meta.get(room)?.archived) this.setArchived(room, false)
     const text = String(msg.text ?? '').trim()
     if (!text) throw new Error('text is required')
     const kind = KINDS.includes(msg.kind) ? msg.kind : 'note'

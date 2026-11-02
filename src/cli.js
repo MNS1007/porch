@@ -66,9 +66,18 @@ if (!cmd || cmd === 'serve') {
     console.error(err.message)
     process.exit(1)
   }
+} else if (cmd === 'group' && (sub === 'archive' || sub === 'unarchive')) {
+  if (!rest[0]) usage()
+  try {
+    const g = store.setArchived(rest[0], sub === 'archive')
+    console.log(sub === 'archive' ? `Archived "${g.name}". Its messages stay and can be searched. A new post brings it back.` : `"${g.name}" is back in the list.`)
+  } catch (err) {
+    console.error(err.message)
+    process.exit(1)
+  }
 } else if (cmd === 'group' && (sub === 'list' || sub === 'ls')) {
   for (const r of store.meta.values()) {
-    if (r.type === 'group') console.log(`${r.name.padEnd(20)} ${(r.title || '').padEnd(20)} members: ${r.members.join(',')}`)
+    if (r.type === 'group') console.log(`${r.name.padEnd(20)} ${(r.title || '').padEnd(20)} members: ${r.members ? r.members.join(',') : 'open'}${r.archived ? '  (archived)' : ''}`)
   }
 } else if (cmd === 'token' && sub === 'revoke') {
   if (!rest[0]) usage()
@@ -88,6 +97,8 @@ function usage() {
   porch token revoke <name>
   porch group add <name> <agent,agent|*> [--title "Title"]
                                             make or change a group; * opens it to every agent
+  porch group archive <name>                hide a group; its messages stay
+  porch group unarchive <name>
   porch group list`)
   process.exit(1)
 }

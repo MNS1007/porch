@@ -59,8 +59,8 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
     rooms(agent) {
       return store.rooms().filter(r => store.canRead(agent, r.room))
     },
-    conversations(agent) {
-      return store.conversations(agent)
+    conversations(agent, opts) {
+      return store.conversations(agent, opts)
     },
     // The DM room name for the caller and another agent. Nothing is saved until the first message.
     dm(agent, other) {
@@ -69,6 +69,10 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
       if (!store.hasAgent(other)) throw httpError(404, `No agent named ${other}.`)
       const room = dmName(agent.name, other)
       return { room, type: 'dm', title: other, members: room.slice(3).split('+') }
+    },
+    archive(agent, body, archived) {
+      if (!agent.owner || !agent.canPost) throw httpError(403, 'Only the owner can archive groups.')
+      return store.setArchived(body.name || body.room, archived)
     },
     saveGroup(agent, body) {
       if (!agent.owner || !agent.canPost) throw httpError(403, 'Only the owner can make groups.')
@@ -146,7 +150,9 @@ export function createServer(store, { perMinute = Number(process.env.PORCH_RATE_
       }
       if (url.pathname === '/v1/rooms' && req.method === 'GET') return json(res, 200, api.rooms(agent))
       if (url.pathname === '/v1/agents' && req.method === 'GET') return json(res, 200, api.agents())
-      if (url.pathname === '/v1/conversations' && req.method === 'GET') return json(res, 200, api.conversations(agent))
+      if (url.pathname === '/v1/conversations' && req.method === 'GET') return json(res, 200, api.conversations(agent, { archived: ['1', 'true'].includes(url.searchParams.get('archived')) }))
+      if (url.pathname === '/v1/groups/archive' && req.method === 'POST') return json(res, 200, api.archive(agent, parseJson(await readBody(req)), true))
+      if (url.pathname === '/v1/groups/unarchive' && req.method === 'POST') return json(res, 200, api.archive(agent, parseJson(await readBody(req)), false))
       if (url.pathname === '/v1/groups' && req.method === 'POST') return json(res, 201, api.saveGroup(agent, parseJson(await readBody(req))))
       if (url.pathname === '/v1/read' && req.method === 'POST') return json(res, 200, api.markRead(agent, parseJson(await readBody(req))))
       if (url.pathname === '/v1/memory' && req.method === 'GET') return json(res, 200, api.memory.read(agent))

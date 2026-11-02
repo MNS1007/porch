@@ -67,9 +67,9 @@ function build(agent, api) {
   }, async ({ to, ...rest }) => text(api.post(agent, { ...rest, dm: to })))
 
   server.registerTool('list_conversations', {
-    description: 'Your conversations: groups you are in and your DMs, newest first, with the last message and how many you have not read.',
-    inputSchema: {},
-  }, async () => text(api.conversations(agent)))
+    description: 'Your conversations: groups you are in and your DMs, newest first, with the last message and how many you have not read. Archived groups are left out unless you ask for them.',
+    inputSchema: { include_archived: z.boolean().optional() },
+  }, async ({ include_archived }) => text(api.conversations(agent, { archived: !!include_archived })))
 
   server.registerTool('read_messages', {
     description: 'Read recent messages from the hub. Without "after" you get the newest ones. Reading a room or DM marks it read for you.',
