@@ -165,6 +165,13 @@ textarea { flex: 1; resize: none; min-height: 46px; max-height: 40vh; padding: 1
 .version .acts { grid-row: span 2; opacity: 1; }
 .version .acts button { opacity: 1; }
 
+/* Archived groups: tucked away at the foot of the list. */
+details.archived { margin: 18px 0 0; }
+details.archived summary { cursor: pointer; font: 600 13px/1 var(--ui); color: var(--muted); padding: 6px 10px; list-style-position: inside; }
+details.archived summary:hover { color: var(--ink); }
+details.archived .conv { opacity: .78; }
+details.archived .conv:hover, details.archived .conv[aria-current="true"] { opacity: 1; }
+
 /* New group */
 dialog { border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); color: var(--ink); padding: 0; width: min(420px, calc(100% - 32px)); }
 dialog::backdrop { background: rgba(17, 24, 33, .45); }
@@ -215,6 +222,10 @@ legend { font-weight: 600; font-size: 14px; margin-bottom: 6px; padding: 0; }
       </button>
       <nav aria-label="Conversations" id="convs"></nav>
       <section aria-labelledby="h-agents"><h2 id="h-agents">Message an agent</h2><div id="agents"></div></section>
+      <details class="archived" id="archived-box" hidden>
+        <summary>Archived <span id="archived-count"></span></summary>
+        <nav aria-label="Archived conversations" id="archived"></nav>
+      </details>
     </div>
     <div class="you"><span id="me"></span><button class="link" id="signout" type="button">Sign out</button></div>
   </aside>
@@ -223,6 +234,7 @@ legend { font-weight: 600; font-size: 14px; margin-bottom: 6px; padding: 0; }
       <button class="quiet back" id="back" type="button">Back</button>
       <div class="heading"><h2 id="title">Everyone</h2><p class="who-sees" id="who-sees"></p></div>
       <button class="quiet" id="edit-group" type="button" hidden>Members</button>
+      <button class="quiet" id="archive-group" type="button" hidden>Archive</button>
       <button class="quiet" id="mem-history" type="button" hidden>History</button>
       <button class="quiet" id="mem-edit" type="button" hidden>Edit</button>
     </div>
@@ -410,23 +422,29 @@ async function loadAgents() {
 }
 
 async function loadConvs() {
-  convs = await api('/v1/conversations')
-  $('convs').replaceChildren(...convs.map(c => {
-    const b = el('button', 'conv' + (c.unread && c.room !== open?.room ? ' unread' : ''))
-    b.type = 'button'
-    if (open && c.room === open.room) b.setAttribute('aria-current', 'true')
-    const other = c.type === 'dm' ? dmOther(c) : null
-    const mark = el('span', 'mark' + (other ? '' : ' group'), (c.title || c.room).slice(0, 1).toUpperCase())
-    if (other) mark.style.setProperty('--c', colour(other))
-    b.append(mark, el('span', 'title', c.title), el('span', 'when', c.last ? stamp(c.last.ts) : ''))
-    const peek = !c.last ? 'No messages yet' : (c.last.from === me.name ? 'You' : displayName(c.last.from)) + ': ' + c.last.text.replace(/\s+/g, ' ').slice(0, 120)
-    b.append(el('span', 'peek', peek))
-    const count = c.unread && c.room !== open?.room ? el('span', 'count', c.unread > 99 ? '99+' : String(c.unread)) : el('span')
-    if (c.unread && c.room !== open?.room) count.setAttribute('aria-label', c.unread + ' unread')
-    b.append(count)
-    b.onclick = () => openConv(c)
-    return b
-  }))
+  convs = await api('/v1/conversations?archived=1')
+  const archived = convs.filter(c => c.archived)
+  $('convs').replaceChildren(...convs.filter(c => !c.archived).map(convRow))
+  $('archived').replaceChildren(...archived.map(convRow))
+  $('archived-box').hidden = !archived.length
+  $('archived-count').textContent = archived.length ? String(archived.length) : ''
+}
+
+function convRow(c) {
+  const b = el('button', 'conv' + (c.unread && c.room !== open?.room ? ' unread' : ''))
+  b.type = 'button'
+  if (open && c.room === open.room) b.setAttribute('aria-current', 'true')
+  const other = c.type === 'dm' ? dmOther(c) : null
+  const mark = el('span', 'mark' + (other ? '' : ' group'), (c.title.replace(/^#/, '') || c.room).slice(0, 1).toUpperCase())
+  if (other) mark.style.setProperty('--c', colour(other))
+  b.append(mark, el('span', 'title', c.title), el('span', 'when', c.last ? stamp(c.last.ts) : ''))
+  const peek = !c.last ? 'No messages yet' : (c.last.from === me.name ? 'You' : displayName(c.last.from)) + ': ' + c.last.text.replace(/\s+/g, ' ').slice(0, 120)
+  b.append(el('span', 'peek', peek))
+  const count = c.unread && c.room !== open?.room ? el('span', 'count', c.unread > 99 ? '99+' : String(c.unread)) : el('span')
+  if (c.unread && c.room !== open?.room) count.setAttribute('aria-label', c.unread + ' unread')
+  b.append(count)
+  b.onclick = () => openConv(c)
+  return b
 }
 const refreshConvs = later(loadConvs, 250)
 
@@ -456,8 +474,10 @@ function openConv(c) {
   $('search').value = ''
   store.set('porch-open', c.room)
   $('title').textContent = c.title
-  $('who-sees').textContent = whoSees(c)
+  $('who-sees').textContent = whoSees(c) + (c.archived ? '. Archived: out of the list until someone posts here.' : '')
   $('edit-group').hidden = !(me.owner && c.type === 'group' && c.room !== 'general')
+  $('archive-group').hidden = $('edit-group').hidden || !me.canPost
+  $('archive-group').textContent = c.archived ? 'Unarchive' : 'Archive'
   const isMember = c.type !== 'dm' || c.room.slice(3).split('+').includes(me.name)
   $('post').hidden = !me.canPost || !isMember && !me.owner
   $('text').placeholder = c.type === 'dm' && isMember ? 'Message ' + displayName(dmOther(c)) : `Message ${c.title}. Type @ and a name to address an agent.`
@@ -983,6 +1003,18 @@ function groupDialog(group) {
   ;(group ? $('group-members').querySelector('input') : $('group-name')).focus()
 }
 $('new-group').onclick = () => groupDialog(null)
+// Archive keeps every message; it only takes the group out of the list.
+$('archive-group').onclick = async () => {
+  const c = convs.find(x => x.room === open.room) || open
+  try {
+    await api(c.archived ? '/v1/groups/unarchive' : '/v1/groups/archive', { method: 'POST', body: JSON.stringify({ name: c.room }) })
+    await loadConvs()
+    openConv(convs.find(x => x.room === c.room) || c)
+  } catch (err) {
+    $('who-sees').textContent = err.message
+  }
+}
+
 $('edit-group').onclick = () => groupDialog(convs.find(c => c.room === open.room) || open)
 $('group-cancel').onclick = () => $('group-dialog').close()
 
