@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>porch vault</title>
+<style>
+/* Same paper, ink and porch light as the hub page. No fonts are fetched:
+   this page holds keys, so it loads nothing from anywhere else. */
+:root {
+  --paper: #eef1f4; --surface: #ffffff; --ink: #17202b; --muted: #5e6b7a; --rule: #d5dce3;
+  --light: #d99a1e; --glow: rgba(242, 178, 52, .28); --alert: #c0362c; --ok: #17806a;
+  --ui: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --read: "Newsreader", Georgia, "Times New Roman", serif;
+  --a0: #7044c4; --a1: #a86a12; --a2: #17806a; --a3: #2e66a8; --a4: #b03f68; --a5: #557a12;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #111821; --surface: #18212c; --ink: #e6ebf0; --muted: #93a1b0; --rule: #283341;
+    --light: #f2c14e; --glow: rgba(242, 193, 78, .22); --alert: #f0786c; --ok: #5fcfb2;
+    --a0: #b39af0; --a1: #e2b25e; --a2: #5fcfb2; --a3: #82b2ec; --a4: #ee8db0; --a5: #a9cf5f;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--ui); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: .55; }
+:focus-visible { outline: 2px solid var(--light); outline-offset: 2px; border-radius: 4px; }
+[hidden] { display: none !important; }
+.err { color: var(--alert); margin: 0; }
+.primary { background: var(--ink); color: var(--paper); border: 0; border-radius: 8px; padding: 9px 16px; font-weight: 600; }
+.quiet { background: none; border: 1px solid var(--rule); border-radius: 8px; padding: 6px 12px; font-weight: 600; font-size: 13.5px; }
+.quiet:hover { background: var(--surface); }
+.quiet.danger { color: var(--alert); }
+.link { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.link:hover { color: var(--ink); }
+input[type=text], input[type=password], input[type=number], input[type=search], select {
+  padding: 9px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); min-width: 0;
+}
+
+/* Set up and unlock */
+.gate { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.gate form { width: min(420px, 100%); display: grid; gap: 14px; }
+.gate h1 { font: 700 44px/1 var(--ui); letter-spacing: -.03em; margin: 0; }
+.gate p { margin: 0; color: var(--muted); }
+.gate input { padding: 12px 14px; }
+.gate .lock { width: 46px; height: 46px; border-radius: 50%; border: 2px solid var(--muted); display: grid; place-items: center; }
+.gate .lock::after { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--muted); }
+
+/* Page */
+.page { max-width: 920px; margin: 0 auto; padding: 0 28px 64px; }
+header { display: flex; align-items: center; gap: 14px; padding: 22px 0 18px; border-bottom: 1px solid var(--rule); }
+header h1 { font: 700 26px/1 var(--ui); letter-spacing: -.03em; margin: 0; flex: 1; }
+.state { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--light); box-shadow: 0 0 0 4px var(--glow); }
+section { padding: 30px 0 6px; }
+section > h2 { font: 700 20px/1.2 var(--ui); letter-spacing: -.01em; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
+section > .lede { color: var(--muted); margin: 0 0 16px; max-width: 68ch; }
+.none { color: var(--muted); padding: 14px 0; margin: 0; }
+.who { font-weight: 700; color: var(--c, var(--ink)); overflow-wrap: anywhere; }
+.facts { font-size: 13.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 16px; margin: 4px 0 0; }
+.facts b { color: var(--ink); font-weight: 600; }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+/* Waiting for you: the porch light is on while an agent is asking. */
+.count { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--light); color: #17202b; font-size: 12.5px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 4px var(--glow); }
+.ask { background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--light); border-radius: 10px; padding: 16px 18px; margin-bottom: 12px; }
+.ask .line1 { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.ask .wants { color: var(--muted); }
+.ask .secret { font-weight: 600; }
+.ask .purpose { font: 17px/1.6 var(--read); margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 68ch; }
+.ask .replaces { font-size: 13px; color: var(--light); font-weight: 600; }
+.changes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 14px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.changes label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.changes .wide { grid-column: 1 / -1; }
+
+/* Grants */
+.grant { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 10px 28px; padding: 16px 0; border-top: 1px solid var(--rule); }
+.grant:first-of-type { border-top: 0; }
+.grant .line1 { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.tag { font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 1px 9px; border: 1px solid var(--rule); color: var(--muted); }
+.tag.active { color: var(--ok); border-color: var(--ok); }
+.tag.paused { color: #17202b; background: var(--light); border-color: var(--light); }
+.tag.revoked, .tag.expired { text-decoration: line-through; }
+.grant.gone { opacity: .62; }
+.meters { display: grid; gap: 10px; align-content: start; }
+.meter { display: grid; gap: 3px; font-size: 13px; }
+.meter .nums { display: flex; justify-content: space-between; color: var(--muted); }
+.meter .nums b { color: var(--ink); font-weight: 600; }
+.bar { height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--ink); border-radius: 3px; }
+.bar.near span { background: var(--light); }
+
+/* Keys */
+.key { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--rule); }
+.key:first-child { border-top: 0; }
+.key .name { font-weight: 600; flex: 1; overflow-wrap: anywhere; }
+.key .sub { color: var(--muted); font-size: 13.5px; }
+form.add { display: grid; grid-template-columns: 1fr 140px 1.4fr auto; gap: 10px; align-items: end; margin-top: 14px; padding: 16px; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
+form.add label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+form.add .err, form.add .hint { grid-column: 1 / -1; font-size: 13.5px; }
+.hint { color: var(--muted); margin: 0; }
+.ok { color: var(--ok); }
+
+/* Audit */
+form.filter { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 10px; }
+form.filter label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+form.filter input[type=number] { width: 90px; }
+.verdict { font-size: 14px; font-weight: 600; margin: 0 0 8px; min-height: 21px; }
+.verdict.good { color: var(--ok); }
+.verdict.bad { color: var(--alert); }
+.log { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.log th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--rule); }
+.log td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--rule); vertical-align: top; overflow-wrap: anywhere; }
+.log td.num { font-variant-numeric: tabular-nums; color: var(--muted); }
+.log tr.broken td { color: var(--alert); }
+.tablewrap { overflow-x: auto; }
+
+@media (max-width: 760px) {
+  .page { padding: 0 16px 48px; }
+  .grant { grid-template-columns: minmax(0, 1fr); }
+  form.add { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate" hidden>
+  <form id="gate-form">
+    <span class="lock" aria-hidden="true"></span>
+    <h1>porch vault</h1>
+    <p id="gate-text"></p>
+    <input id="pass" type="password" autocomplete="current-password" aria-label="Vault passphrase" required>
+    <input id="pass2" type="password" autocomplete="new-password" aria-label="Type the passphrase again" placeholder="Type it again" hidden>
+    <p class="err" id="gate-err" hidden></p>
+    <button class="primary" type="submit" id="gate-go"></button>
+  </form>
+</div>
+
+<div class="page" id="app" hidden>
+  <header>
+    <h1>porch vault</h1>
+    <span class="state">Unlocked on this computer</span>
+    <button class="quiet" id="refresh" type="button">Refresh</button>
+    <button class="link" id="signout" type="button">Sign out</button>
+  </header>
+
+  <section aria-labelledby="h-pending">
+    <h2 id="h-pending">Waiting for you <span class="count" id="pending-count" hidden></span></h2>
+    <p class="lede">Agents ask here for use of a key. Approving gives the agent a handle for the vault's proxy, limited to the caps below. The agent never sees the key.</p>
+    <div id="pending"></div>
+  </section>
+
+  <section aria-labelledby="h-grants">
+    <h2 id="h-grants">Grants</h2>
+    <p class="lede">What each agent may spend. A grant pauses by itself at 80% of a cap.</p>
+    <div id="grants"></div>
+  </section>
+
+  <section aria-labelledby="h-keys">
+    <h2 id="h-keys">Keys</h2>
+    <p class="lede">Stored encrypted. Once saved, a key is never shown again, here or anywhere.</p>
+    <div id="keys"></div>
+    <form class="add" id="add" autocomplete="off">
+      <label>Name <input type="text" id="key-name" required maxlength="40" pattern="[a-z0-9][a-z0-9_\-]{0,39}" placeholder="openai-main" spellcheck="false"></label>
+      <label>Provider <select id="key-provider"><option value="openai">OpenAI</option><option value="gemini">Gemini</option></select></label>
+      <label>Key <input type="password" id="key-value" required autocomplete="new-password" spellcheck="false"></label>
+      <button class="primary" type="submit">Save key</button>
+      <p class="hint">Saving a name that already exists replaces its key.</p>
+      <p class="err" id="add-err" hidden></p>
+    </form>
+  </section>
+
+  <section aria-labelledby="h-audit">
+    <h2 id="h-audit">Audit</h2>
+    <p class="lede">Every change and every proxied call, each row chained to the one before it.</p>
+    <form class="filter" id="filter">
+      <label>Key <input type="search" id="f-secret" placeholder="any"></label>
+      <label>Agent <input type="search" id="f-agent" placeholder="any"></label>
+      <label>Rows <input type="number" id="f-limit" value="100" min="1" max="2000"></label>
+      <button class="quiet" type="submit">Show</button>
+      <button class="quiet" type="button" id="verify">Check the chain</button>
+    </form>
+    <p class="verdict" id="verdict" aria-live="polite"></p>
+    <div class="tablewrap"><table class="log">
+      <thead><tr><th>#</th><th>When</th><th>Who</th><th>What</th><th>Key</th><th>Grant</th><th>Cost</th><th>Detail</th></tr></thead>
+      <tbody id="audit"></tbody>
+    </table></div>
+  </section>
+</div>
+
+<script>
+// Everything that came from an agent goes in with textContent, never as HTML.
+const $ = id => document.getElementById(id)
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = String(text); return e }
+const add = (parent, ...kids) => { for (const k of kids) if (k) parent.append(k); return parent }
+
+let csrf = null   // only in memory; a reload asks for the passphrase again
+let mode = null   // 'setup' | 'unlock'
+let brokenAt = null
+
+const colour = full => {
+  let h = 0
+  for (const ch of String(full).split('/')[0]) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return `var(--a${h % 6})`
+}
+const usd = n => n == null ? '' : '$' + Number(n).toFixed(Number(n) < 1 ? 3 : 2)
+const when = t => { if (!t) return ''; const d = new Date(t); return isNaN(d) ? String(t) : d.toLocaleString() }
+const list = v => Array.isArray(v) ? v.join(', ') : v == null ? '' : String(v)
+
+async function api(path, { method = 'GET', body } = {}) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (method !== 'GET' && csrf) headers['x-vault-csrf'] = csrf
+  const r = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' })
+  const data = await r.json().catch(() => ({}))
+  if (r.status === 401 && path.startsWith('/vault/api/')) { csrf = null; showGate('unlock'); throw new Error(data.error || 'Locked') }
+  if (!r.ok) throw new Error(data.error || r.statusText)
+  return data
+}
+
+// Set up and unlock
+
+function showGate(m, error) {
+  mode = m
+  $('app').hidden = true
+  $('gate').hidden = false
+  const setup = m === 'setup'
+  $('gate-text').textContent = setup
+    ? 'Choose a passphrase for the vault. It protects every key you store here, and it cannot be recovered, so keep it in your password manager.'
+    : 'Type the vault passphrase to manage keys and answer agents.'
+  $('pass').placeholder = setup ? 'New passphrase, 10 characters or more' : 'Passphrase'
+  $('pass').autocomplete = setup ? 'new-password' : 'current-password'
+  $('pass2').hidden = !setup
+  $('pass2').required = setup
+  $('gate-go').textContent = setup ? 'Set up the vault' : 'Unlock'
+  $('gate-err').hidden = !error
+  $('gate-err').textContent = error || ''
+  $('pass').focus()
+}
+
+$('gate-form').addEventListener('submit', async e => {
+  e.preventDefault()
+  const pass = $('pass').value
+  if (mode === 'setup' && pass !== $('pass2').value) return showGate('setup', 'The two passphrases do not match.')
+  $('gate-go').disabled = true
+  try {
+    const r = await api(mode === 'setup' ? '/vault/api/setup' : '/vault/session', { method: 'POST', body: { passphrase: pass } })
+    csrf = r.csrf
+    $('pass').value = $('pass2').value = ''
+    await load()
+  } catch (err) {
+    $('pass').value = $('pass2').value = ''
+    showGate(mode, err.message)
+  } finally { $('gate-go').disabled = false }
+})
+
+$('signout').onclick = async () => {
+  try { await api('/vault/session', { method: 'DELETE' }) } catch {}
+  csrf = null
+  showGate('unlock')
+}
+$('refresh').onclick = () => load()
+document.addEventListener('visibilitychange', () => { if (!document.hidden && csrf) load() })
+
+async function load() {
+  const s = await api('/vault/api/state')
+  if (!s.setUp) return showGate('setup')
+  if (!s.session || !csrf) return showGate('unlock')
+  $('gate').hidden = true
+  $('app').hidden = false
+  drawPending(s.pending || [])
+  drawGrants(s.grants || [])
+  drawKeys(s.secrets || [])
+  loadAudit().catch(e => { $('verdict').className = 'verdict bad'; $('verdict').textContent = e.message })
+}
+
+// Waiting for you
+
+function drawPending(rows) {
+  const box = $('pending')
+  box.replaceChildren()
+  $('pending-count').hidden = !rows.length
+  $('pending-count').textContent = rows.length
+  document.title = rows.length ? `(${rows.length}) porch vault` : 'porch vault'
+  if (!rows.length) return add(box, el('p', 'none', 'Nothing waiting. When an agent asks for a key, it shows up here.'))
+  for (const r of rows) box.append(askCard(r))
+}
+
+function askCard(r) {
+  const card = el('article', 'ask')
+  const who = el('span', 'who', r.agent); who.style.setProperty('--c', colour(r.agent))
+  add(card, add(el('div', 'line1'), who, el('span', 'wants', 'wants to use'), el('span', 'secret', r.secret),
+    r.replaces_grant ? el('span', 'replaces', `changes grant ${r.replaces_grant}`) : null))
+  add(card, el('p', 'purpose', r.purpose))
+  const sc = r.scope || {}, b = r.budget || {}
+  add(card, facts([['Models', list(sc.models) || 'any'], ['Endpoints', list(sc.endpoints) || 'any']]))
+  add(card, facts([['Per call', usd(b.per_request_usd)], ['Per day', usd(b.daily_usd)], ['In all', usd(b.total_usd)],
+    ['Rate', b.rate_per_min != null ? `${b.rate_per_min} a minute` : ''], ['For', b.days != null ? `${b.days} days` : '']]))
+  add(card, el('div', 'facts', `Asked ${when(r.created)}`))
+
+  const err = el('p', 'err'); err.hidden = true
+  const acts = el('div', 'acts')
+  const approve = el('button', 'primary', 'Approve')
+  const change = el('button', 'quiet', 'Approve with changes')
+  const deny = el('button', 'quiet danger', 'Deny')
+  for (const btn of [approve, change, deny]) btn.type = 'button'
+  add(acts, approve, change, deny)
+  add(card, acts, err)
+
+  const form = changesForm(b)
+  form.hidden = true
+  add(card, form)
+
+  const decide = async body => {
+    for (const btn of card.querySelectorAll('button')) btn.disabled = true
+    try { await api(`/vault/api/requests/${encodeURIComponent(r.id)}/decide`, { method: 'POST', body }); await load() }
+    catch (e) { err.textContent = e.message; err.hidden = false; for (const btn of card.querySelectorAll('button')) btn.disabled = false }
+  }
+  approve.onclick = () => decide({ approve: true })
+  deny.onclick = () => { if (confirm(`Deny ${r.agent} use of ${r.secret}?`)) decide({ approve: false }) }
+  change.onclick = () => { form.hidden = !form.hidden; acts.hidden = !form.hidden; if (!form.hidden) form.querySelector('input').focus() }
+  form.addEventListener('submit', e => {
+    e.preventDefault()
+    const changes = {}
+    for (const input of form.querySelectorAll('input[data-k]')) if (input.value !== '') changes[input.dataset.k] = Number(input.value)
+    decide({ approve: true, changes, note: form.querySelector('[data-note]').value || undefined })
+  })
+  form.querySelector('[data-cancel]').onclick = () => { form.hidden = true; acts.hidden = false }
+  return card
+}
+
+function changesForm(b) {
+  const form = el('form', 'changes')
+  const field = (label, key, step) => {
+    const input = el('input'); input.type = 'number'; input.min = step; input.step = step; input.dataset.k = key
+    if (b[key] != null) input.value = b[key]
+    return add(el('label', null, label), input)
+  }
+  add(form, field('Per call, USD', 'per_request_usd', '0.01'), field('Per day, USD', 'daily_usd', '0.01'),
+    field('In all, USD', 'total_usd', '0.01'), field('Calls a minute', 'rate_per_min', '1'), field('Days until it expires', 'days', '1'))
+  const note = el('input'); note.type = 'text'; note.dataset.note = ''; note.maxLength = 500; note.placeholder = 'Optional, the agent sees it'
+  add(form, add(el('label', 'wide', 'Note'), note))
+  const acts = el('div', 'acts wide')
+  const go = el('button', 'primary', 'Approve with these caps'); go.type = 'submit'
+  const cancel = el('button', 'quiet', 'Cancel'); cancel.type = 'button'; cancel.dataset.cancel = ''
+  add(form, add(acts, go, cancel))
+  return form
+}
+
+function facts(pairs) {
+  const p = el('div', 'facts')
+  for (const [k, v] of pairs) if (v) add(p, add(el('span', null, k + ' '), el('b', null, v)))
+  return p
+}
+
+// Grants
+
+function drawGrants(rows) {
+  const box = $('grants')
+  box.replaceChildren()
+  if (!rows.length) return add(box, el('p', 'none', 'No grants yet. Approve a request to make one.'))
+  const order = { paused: 0, active: 1, expired: 2, revoked: 3 }
+  rows.sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4) || b.id - a.id)
+  for (const g of rows) box.append(grantRow(g))
+}
+
+function grantRow(g) {
+  const gone = g.status === 'revoked' || g.status === 'expired'
+  const row = el('article', 'grant' + (gone ? ' gone' : ''))
+  const main = el('div')
+  const who = el('span', 'who', g.agent); who.style.setProperty('--c', colour(g.agent))
+  add(main, add(el('div', 'line1'), who, el('span', 'wants', 'uses'), el('span', 'secret', g.secret), el('span', 'tag ' + g.status, g.status)))
+  const sc = g.scope || {}
+  add(main, facts([['Models', list(sc.models) || 'any'], ['Endpoints', list(sc.endpoints) || 'any']]))
+  add(main, facts([['Per call', usd(g.per_request_usd)], ['Rate', `${g.rate_per_min} a minute`],
+    [gone ? 'Ended' : 'Expires', when(g.expires)], ['Grant', String(g.id)]]))
+  const acts = el('div', 'acts')
+  const err = el('p', 'err'); err.hidden = true
+  const act = (label, cls, path, ask) => {
+    const btn = el('button', cls, label); btn.type = 'button'
+    btn.onclick = async () => {
+      if (ask && !confirm(ask)) return
+      btn.disabled = true
+      try { await api(`/vault/api/grants/${encodeURIComponent(g.id)}/${path}`, { method: 'POST' }); await load() }
+      catch (e) { err.textContent = e.message; err.hidden = false; btn.disabled = false }
+    }
+    return btn
+  }
+  if (g.status === 'paused') acts.append(act('Resume', 'quiet', 'resume'))
+  if (!gone) acts.append(act('Revoke', 'quiet danger', 'revoke', `Revoke ${g.agent}'s grant for ${g.secret}? Its handle stops working at once.`))
+  add(main, acts, err)
+
+  const meters = add(el('div', 'meters'), meter('Spent', g.spent, g.total_usd), meter('Today', g.today, g.daily_usd))
+  return add(row, main, meters)
+}
+
+function meter(label, used, cap) {
+  const share = cap > 0 ? Math.min(used / cap, 1) : 0
+  const m = el('div', 'meter')
+  const nums = add(el('div', 'nums'), el('span', null, label), add(el('span'), el('b', null, usd(used || 0)), document.createTextNode(' of ' + usd(cap))))
+  const bar = el('div', 'bar' + (share >= .8 ? ' near' : ''))
+  const fill = el('span'); fill.style.width = (share * 100).toFixed(1) + '%'
+  bar.setAttribute('role', 'img'); bar.setAttribute('aria-label', `${label}: ${Math.round(share * 100)}% of the cap`)
+  return add(m, nums, add(bar, fill))
+}
+
+// Keys
+
+function drawKeys(rows) {
+  const box = $('keys')
+  box.replaceChildren()
+  if (!rows.length) return add(box, el('p', 'none', 'No keys yet. Add one below.'))
+  for (const s of rows) {
+    const row = el('div', 'key')
+    const sub = el('span', 'sub', `${s.provider === 'gemini' ? 'Gemini' : 'OpenAI'}, saved ${when(s.rotated || s.created)}`)
+    const del = el('button', 'quiet danger', 'Delete'); del.type = 'button'
+    del.onclick = async () => {
+      if (!confirm(`Delete the key ${s.name}? Grants that use it stop working.`)) return
+      try { await api(`/vault/api/secrets/${encodeURIComponent(s.name)}`, { method: 'DELETE' }); await load() }
+      catch (e) { alert(e.message) }
+    }
+    box.append(add(row, el('span', 'name', s.name), sub, del))
+  }
+}
+
+$('add').addEventListener('submit', async e => {
+  e.preventDefault()
+  const value = $('key-value')
+  const body = { name: $('key-name').value.trim(), provider: $('key-provider').value, value: value.value }
+  value.value = '' // sent once, never kept on the page
+  $('add-err').hidden = true
+  try {
+    await api('/vault/api/secrets', { method: 'POST', body })
+    $('key-name').value = ''
+    await load()
+  } catch (err) { $('add-err').textContent = err.message + ' Paste the key again to retry.'; $('add-err').hidden = false }
+})
+
+// Audit
+
+async function loadAudit() {
+  const q = new URLSearchParams()
+  if ($('f-secret').value.trim()) q.set('secret', $('f-secret').value.trim())
+  if ($('f-agent').value.trim()) q.set('agent', $('f-agent').value.trim())
+  q.set('limit', $('f-limit').value || '100')
+  const rows = await api('/vault/api/audit?' + q)
+  const body = $('audit')
+  body.replaceChildren()
+  rows.sort((a, b) => b.seq - a.seq)
+  if (!rows.length) {
+    const td = el('td', 'none', 'No rows match.'); td.colSpan = 8
+    return body.append(add(el('tr'), td))
+  }
+  for (const a of rows) {
+    const tr = el('tr', brokenAt != null && a.seq >= brokenAt ? 'broken' : null)
+    add(tr, el('td', 'num', a.seq), el('td', 'num', when(a.ts)), el('td', null, a.actor), el('td', null, a.action),
+      el('td', null, a.secret ?? ''), el('td', 'num', a.grant_id ?? ''), el('td', 'num', a.cost_usd != null ? usd(a.cost_usd) : ''), el('td', null, a.detail ?? ''))
+    body.append(tr)
+  }
+}
+
+$('filter').addEventListener('submit', e => { e.preventDefault(); loadAudit().catch(() => {}) })
+$('verify').onclick = async () => {
+  const v = $('verdict')
+  v.className = 'verdict'; v.textContent = 'Checking...'
+  try {
+    const r = await api('/vault/api/audit/verify')
+    brokenAt = r.ok ? null : r.brokenAt
+    v.className = 'verdict ' + (r.ok ? 'good' : 'bad')
+    v.textContent = r.ok ? 'The chain is intact. No row has been changed or removed.' : `The chain breaks at row ${r.brokenAt}. That row or one before it was changed.`
+    loadAudit().catch(() => {})
+  } catch (e) { v.className = 'verdict bad'; v.textContent = e.message }
+}
+
+load().catch(err => showGate('unlock', err.message))
+</script>
+</body>
+</html>
