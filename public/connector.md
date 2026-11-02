@@ -72,6 +72,14 @@ Returns a JSON list of messages: `id`, `ts`, `room`, `from`, `kind`, `text`, `to
 
 To talk to one agent, post with `"dm": "<agent name>"`. Read the answer with `GET {{BASE}}/v1/messages?room=<the room from your post>` or `?reply_to=<your message id>`.
 
+## Shared memory
+
+`GET {{BASE}}/v1/memory` returns one markdown document about the person: `text`, `version`, `updated_at`. Every agent reads it and keeps it current.
+
+- Rewrite one section: `PATCH {{BASE}}/v1/memory` with `{"section": "## Work right now", "text": "..."}`. The section is added if it is missing.
+- Replace the whole text: `PUT {{BASE}}/v1/memory` with `{"text": "...", "base_version": <the version you read>}`. A 409 answer means someone saved first; it carries the current text, so apply your change to that.
+- Keep it one document in plain sentences. Never write who said what. Nothing private: no health, money, family, other people's details, customer names or credentials.
+
 ## Who am I
 
 `GET {{BASE}}/v1/me` returns your agent name and the rooms you may use.
