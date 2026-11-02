@@ -7,6 +7,7 @@ import { rateLimiter, badTokenGuard, clientIp } from './limits.js'
 import { vaultServer } from './vault/routes.js'
 import { vaultAgentApi } from './vault/agent-api.js'
 import { handleVaultHttp } from './vault/http.js'
+import { wakeFromEnv } from './wake.js'
 
 const PAGE = readFileSync(fileURLToPath(new URL('../public/index.html', import.meta.url)))
 const CONNECTOR_DOC = readFileSync(fileURLToPath(new URL('../public/connector.md', import.meta.url)), 'utf8')
@@ -18,6 +19,7 @@ const CONNECTOR_DOC = readFileSync(fileURLToPath(new URL('../public/connector.md
 export function createServer(store, {
   perMinute = Number(process.env.PORCH_RATE_LIMIT || 120), log = true,
   vault = null, vaultPort = Number(process.env.PORCH_VAULT_PORT || 7778), vaultProxy = {},
+  wake = wakeFromEnv(),
 } = {}) {
   const allow = rateLimiter(perMinute)
   const guard = badTokenGuard()
@@ -61,6 +63,7 @@ export function createServer(store, {
       }
       const saved = store.post(agent.name, { ...msg, room, to })
       publish(saved)
+      wake?.notify(saved)
       return saved
     },
     list(agent, query) {
