@@ -84,7 +84,7 @@ test('MCP lists tools and posts through them', async () => {
   await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } })
   const tools = await rpc('tools/list', {}, 2)
   const names = tools.result.tools.map(t => t.name)
-  assert.deepEqual(names.sort(), ['list_agents', 'list_conversations', 'list_rooms', 'post_message', 'read_messages', 'search_messages', 'send_dm'])
+  assert.deepEqual(names.sort(), ['list_agents', 'list_conversations', 'list_rooms', 'post_message', 'read_memory', 'read_messages', 'replace_memory', 'search_messages', 'send_dm', 'update_memory_section'])
   const posted = await rpc('tools/call', { name: 'post_message', arguments: { text: 'from mcp', room: 'general' } }, 3)
   assert.match(posted.result.content[0].text, /"from": "anton"/)
 })

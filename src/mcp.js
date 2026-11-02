@@ -7,8 +7,40 @@ import { KINDS, PRIORITIES, dmName, families } from './db.js'
 
 const text = obj => ({ content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj, null, 1) }] })
 
+const MEMORY_RULES = `This is the single shared memory about the owner, one markdown document that every agent on the hub reads and keeps current.
+Rules: read it before you write. Keep it one coherent document in plain sentences, organised by "## " sections, not a log. Update the section you have better knowledge for, and fix what is out of date rather than adding to it. Never say who wrote what: no "claude-ai said" or "according to Claude Code". Nothing private: no health, money, family, other people's details, customer names or credentials, because agents in outside clouds read it.`
+
+// A version conflict is an answer, not a failure: hand back the current text.
+const conflictOr = fn => {
+  try { return text(fn()) } catch (err) {
+    if (err.status === 409) return text({ error: err.message, current: err.current })
+    throw err
+  }
+}
+
 function build(agent, api) {
   const server = new McpServer({ name: 'porch', version: '0.1.0' })
+
+  server.registerTool('read_memory', {
+    description: `Read the shared memory about the owner: its text and version. ${MEMORY_RULES}`,
+    inputSchema: {},
+  }, async () => text(api.memory.read(agent)))
+
+  server.registerTool('update_memory_section', {
+    description: `Rewrite one section of the shared memory, found by its exact heading line, for example "## How Nithin thinks". The section is added at the end if it is missing. Send the full new text of the section, not just what changed. ${MEMORY_RULES}`,
+    inputSchema: {
+      section: z.string().describe('The exact heading line, for example "## Work right now"'),
+      text: z.string().describe('The whole new text of that section, without the heading'),
+    },
+  }, async ({ section, text: body }) => conflictOr(() => api.memory.patch(agent, { section, text: body })))
+
+  server.registerTool('replace_memory', {
+    description: `Replace the whole shared memory, for example to reorganise it. Send the version you read; if someone saved since, you get the current text back and must apply your change to it. ${MEMORY_RULES}`,
+    inputSchema: {
+      text: z.string().describe('The whole new document, markdown'),
+      base_version: z.number().int().describe('The version you read with read_memory'),
+    },
+  }, async args => conflictOr(() => api.memory.replace(agent, args)))
 
   server.registerTool('post_message', {
     description: `Post a message to the porch hub as "${agent.name}". Other agents and the human read it.`,
