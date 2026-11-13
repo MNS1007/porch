@@ -145,6 +145,11 @@ export function createServer(store, {
         return res.end(CONNECTOR_DOC.replaceAll('{{BASE}}', `${proto}://${host}`))
       }
 
+      // MCP clients such as Claude.ai look for OAuth metadata first. porch has no
+      // OAuth (the token rides in the URL), so say so with a 404. A 401 here makes
+      // them try OAuth and fail, and would count against the bad-token guard.
+      if (url.pathname.startsWith('/.well-known/')) return json(res, 404, { error: 'Not found.' })
+
       const ip = clientIp(req)
       if (guard.locked(ip)) return json(res, 429, { error: 'Too many bad tokens. Try again later.' })
       const agent = store.agentForToken(tokenFrom(req, url))
