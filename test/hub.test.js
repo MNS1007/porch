@@ -106,8 +106,23 @@ test('bad tokens from one address get locked out', async () => {
   const hit = () => fetch(base + '/v1/messages', { headers: { Authorization: 'Bearer porch_guess', 'X-Forwarded-For': '203.0.113.9' } })
   for (let i = 0; i < 10; i++) await hit()
   assert.equal((await hit()).status, 429)
-  // a good token from that address is refused too while locked
-  assert.equal((await fetch(base + '/v1/me', { headers: { Authorization: `Bearer ${anton}`, 'X-Forwarded-For': '203.0.113.9' } })).status, 429)
+  // a good token still gets in: hosted assistants share addresses
+  assert.equal((await fetch(base + '/v1/me', { headers: { Authorization: `Bearer ${anton}`, 'X-Forwarded-For': '203.0.113.9' } })).status, 200)
+})
+
+test('requests with no token do not count toward the lockout', async () => {
+  const bare = () => fetch(base + '/favicon.ico', { headers: { 'X-Forwarded-For': '203.0.113.10' } })
+  for (let i = 0; i < 12; i++) await bare()
+  assert.equal((await bare()).status, 401)
+})
+
+test('a URL token works even with an unknown Authorization header', async () => {
+  const r = await fetch(`${base}/v1/me?token=${anton}`, { headers: { Authorization: 'Bearer something-else', 'X-Forwarded-For': '203.0.113.11' } })
+  assert.equal(r.status, 200)
+})
+
+test('OAuth discovery answers 404 without a token', async () => {
+  assert.equal((await fetch(base + '/.well-known/oauth-protected-resource')).status, 404)
 })
 
 test('each agent is rate limited', async () => {

@@ -150,11 +150,15 @@ export function createServer(store, {
       // them try OAuth and fail, and would count against the bad-token guard.
       if (url.pathname.startsWith('/.well-known/')) return json(res, 404, { error: 'Not found.' })
 
+      // Hosted assistants such as Claude.ai reach porch from shared addresses, so a
+      // good token always gets in, even from an address the guard has locked. Only
+      // wrong tokens count as guessing; a request with no token at all does not.
       const ip = clientIp(req)
-      if (guard.locked(ip)) return json(res, 429, { error: 'Too many bad tokens. Try again later.' })
-      const agent = store.agentForToken(tokenFrom(req, url))
+      const tokens = tokensFrom(req, url)
+      const agent = tokens.map(t => store.agentForToken(t)).find(Boolean)
       if (!agent) {
-        guard.fail(ip)
+        if (guard.locked(ip)) return json(res, 429, { error: 'Too many bad tokens. Try again later.' })
+        if (tokens.length) guard.fail(ip)
         if (log) console.log(`[${new Date().toISOString()}] bad token from ${ip} ${req.method} ${url.pathname}`)
         return json(res, 401, { error: 'Missing or unknown token. Send Authorization: Bearer <token>.' })
       }
@@ -279,11 +283,18 @@ export function createServer(store, {
   }
 }
 
-function tokenFrom(req, url) {
+// Every token the request carries, header first. Some clients (Claude.ai
+// connectors) send an Authorization header of their own as well as the ?token=
+// in the URL, so the URL token must still be tried when the header's is unknown.
+function tokensFrom(req, url) {
   const auth = req.headers.authorization || ''
-  if (auth.startsWith('Bearer ')) return auth.slice(7).trim()
-  // For tools that can only set a key header, and for the browser's EventSource.
-  return req.headers['x-api-key'] || url.searchParams.get('token') || null
+  const found = [
+    auth.startsWith('Bearer ') ? auth.slice(7).trim() : '',
+    // For tools that can only set a key header, and for the browser's EventSource.
+    req.headers['x-api-key'] || '',
+    url.searchParams.get('token') || '',
+  ]
+  return [...new Set(found.filter(Boolean))]
 }
 
 function readBody(req) {
