@@ -162,10 +162,22 @@ export function createServer(store, {
         if (log) console.log(`[${new Date().toISOString()}] bad token from ${ip} ${req.method} ${url.pathname}`)
         return json(res, 401, { error: 'Missing or unknown token. Send Authorization: Bearer <token>.' })
       }
-      if (!allow(agent.name)) return json(res, 429, { error: 'Too many requests. Slow down.' })
-      if (log) console.log(`[${new Date().toISOString()}] ${agent.name} ${req.method} ${url.pathname}`)
+      if (!allow(agent.name)) {
+        if (log) console.log(`[${new Date().toISOString()}] ${agent.name} rate limited ${req.method} ${url.pathname}`)
+        return json(res, 429, { error: 'Too many requests. Slow down.' })
+      }
 
-      if (url.pathname === '/mcp') return handleMcp(req, res, agent, api, await readBody(req))
+      if (url.pathname === '/mcp') {
+        const body = await readBody(req)
+        // Name the MCP call and its outcome, so a client that fails to connect can be traced.
+        if (log) {
+          let what = ''
+          try { const m = JSON.parse(body); what = [].concat(m).map(x => x.method || 'reply').join(',') } catch { what = body ? 'unparsed' : 'empty' }
+          res.on('finish', () => console.log(`[${new Date().toISOString()}] ${agent.name} ${req.method} /mcp ${what} -> ${res.statusCode}`))
+        }
+        return handleMcp(req, res, agent, api, body)
+      }
+      if (log) console.log(`[${new Date().toISOString()}] ${agent.name} ${req.method} ${url.pathname}`)
       if (api.vault && url.pathname.startsWith('/v1/vault') && await handleVaultHttp(req, res, agent, api.vault)) return
 
       if (url.pathname === '/v1/messages' && req.method === 'POST') {
